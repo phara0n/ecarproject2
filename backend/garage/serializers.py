@@ -5,6 +5,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model # Import get_user_model
 from django.db import transaction
+from django.core.exceptions import ValidationError
 
 # Get the actual User model class
 User = get_user_model()
@@ -63,10 +64,23 @@ class MileageRecordSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         # Automatically set recorded_by if user is available in context
+        # This will be overridden by perform_create in the view, but good default
         request = self.context.get('request')
         if request and hasattr(request, "user") and request.user.is_authenticated:
             validated_data['recorded_by'] = request.user
-        # The mileage validation is handled in the model's clean/save method
+            
+        # Create the instance first (without saving to DB yet)
+        instance = MileageRecord(**validated_data)
+        
+        # Perform model-level validation (including mileage check)
+        try:
+            instance.full_clean()
+        except ValidationError as e:
+            # Convert Django ValidationError to DRF ValidationError
+            raise serializers.ValidationError(serializers.as_serializer_error(e))
+            
+        # If validation passes, let super().create handle the actual DB save
+        # The view's perform_create will override recorded_by and set source
         return super().create(validated_data)
 
     def validate_mileage(self, value):

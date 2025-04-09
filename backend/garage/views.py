@@ -512,7 +512,7 @@ class ServiceEventViewSet(viewsets.ModelViewSet):
 )
 class PredictionRuleViewSet(viewsets.ModelViewSet):
     """Gère les règles de prédiction basées sur les intervalles (Admin uniquement - CRUD)."""
-    queryset = PredictionRule.objects.filter(is_active=True).select_related('service_type')
+    queryset = PredictionRule.objects.all().select_related('service_type')
     serializer_class = PredictionRuleSerializer
     permission_classes = [IsAdminUser] # Example: Only admins can manage rules
 

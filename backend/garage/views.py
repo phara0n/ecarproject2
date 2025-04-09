@@ -87,18 +87,28 @@ class RegisterView(generics.CreateAPIView):
         responses={
             status.HTTP_201_CREATED: openapi.Response(
                 description="Compte créé avec succès. Retourne les informations de l'utilisateur (sans mot de passe).", 
-                schema=UserSerializer # Use UserSerializer for response schema
+                schema=UserSerializer, # Use UserSerializer for response schema
+                examples={
+                    "application/json": {
+                        # Assuming your UserSerializer outputs this structure
+                        "id": 1,
+                        "username": "nouveau_client",
+                        "email": "client@example.com",
+                        "first_name": "Test",
+                        "last_name": "Client"
+                    }
+                }
             ),
             status.HTTP_400_BAD_REQUEST: openapi.Response(
                 description="Erreur de validation (ex: mots de passe différents, format invalide, utilisateur/email existant)",
                 examples={
                     "application/json": {
-                        "metadata": {"timestamp": "..."},
-                        "data": None,
-                        "error": {
-                            "password": ["Les deux mots de passe ne correspondent pas."],
-                            "phone_number": ["Le numéro de téléphone doit être au format tunisien (ex: +216 20 123 456)."]
-                        }
+                        # Example 1: Password mismatch
+                        "password": ["Les deux mots de passe ne correspondent pas."],
+                        # Example 2: Invalid phone format
+                        # "phone_number": ["Le numéro de téléphone doit être au format tunisien (ex: +216 20 123 456)."]
+                        # Example 3: Username already exists
+                        # "username": ["Un utilisateur avec ce nom d'utilisateur existe déjà."] 
                     }
                 }
             )
@@ -166,9 +176,35 @@ class VehicleViewSet(viewsets.ModelViewSet):
             }
         ),
         responses={
-            status.HTTP_201_CREATED: VehicleSerializer,
-            status.HTTP_400_BAD_REQUEST: "Erreur de validation (ex: format plaque invalide, plaque dupliquée)",
-            status.HTTP_401_UNAUTHORIZED: "Authentification requise",
+            status.HTTP_201_CREATED: openapi.Response(
+                description="Véhicule créé avec succès.",
+                schema=VehicleSerializer,
+                examples={
+                    "application/json": {
+                        "id": 1,
+                        "owner": 1,
+                        "owner_username": "testclient",
+                        "make": "Renault",
+                        "model": "Clio",
+                        "year": 2018,
+                        "registration_number": "123TU4567",
+                        "vin": None,
+                        "initial_mileage": 5000,
+                        "created_at": "2024-05-20T10:00:00Z",
+                        "updated_at": "2024-05-20T10:00:00Z"
+                    }
+                }
+            ),
+            status.HTTP_400_BAD_REQUEST: openapi.Response(
+                description="Erreur de validation (ex: format plaque invalide, plaque dupliquée).",
+                examples={
+                    "application/json": {
+                        "registration_number": ["Le numéro d'immatriculation doit être au format tunisien (ex: 123TU1234 ou RS123456)."],
+                        # "registration_number": ["véhicule avec ce Numéro d'immatriculation existe déjà."] 
+                    }
+                }
+            ),
+            status.HTTP_401_UNAUTHORIZED: openapi.Response(description="Authentification requise") 
         }
     )
     def create(self, request, *args, **kwargs):
@@ -195,7 +231,42 @@ class VehicleViewSet(viewsets.ModelViewSet):
     @swagger_auto_schema(
         operation_summary="Lister les véhicules",
         operation_description="Retourne la liste des véhicules accessibles par l'utilisateur (les siens pour Client, tous pour Admin).",
-        responses={status.HTTP_200_OK: VehicleSerializer(many=True)}
+        responses={
+            status.HTTP_200_OK: openapi.Response(
+                description="Liste des véhicules.",
+                schema=VehicleSerializer(many=True),
+                examples={
+                    "application/json": [
+                        {
+                            "id": 1,
+                            "owner": 1,
+                            "owner_username": "testclient",
+                            "make": "Renault",
+                            "model": "Clio",
+                            "year": 2018,
+                            "registration_number": "123TU4567",
+                            "vin": None,
+                            "initial_mileage": 5000,
+                            "created_at": "2024-05-20T10:00:00Z",
+                            "updated_at": "2024-05-20T10:00:00Z"
+                        },
+                        {
+                            "id": 2,
+                            "owner": 1,
+                            "owner_username": "testclient",
+                            "make": "Peugeot",
+                            "model": "208",
+                            "year": 2020,
+                            "registration_number": "222TU888",
+                            "vin": "VF3XYZ...",
+                            "initial_mileage": 15000,
+                             "created_at": "2024-05-21T11:30:00Z",
+                             "updated_at": "2024-05-21T11:30:00Z"
+                        }
+                    ]
+                }
+            )
+        }
     )
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)

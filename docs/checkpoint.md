@@ -1,55 +1,51 @@
 # Checkpoint
 
-**Current Status:** Core Backend Features Implemented + Basic Docs/Tests/Localization
+**Current Status:** Backend Core Implemented; **Admin Dashboard Frontend Initialized (Vite, Shadcn, Basic Routing)**
 
 **Date:** $(date +%Y-%m-%d)
 
 ## Overview
 
-*   Backend API covers core entities: Users (w/ Profiles), Vehicles (w/ Ownership), Mileage, Service Types, Service Events, Prediction Rules, Predictions, Invoices (upload only).
-*   Rule-based prediction logic is functional, using Avg Daily KM for date estimates.
-*   RBAC simplified to Customer/Admin roles, with initial permissions applied.
-*   User registration, JWT authentication, and Password Reset (console email) are working.
-*   Tunisian-specific validation implemented for phone numbers and license plates (TU/RS).
-*   OpenAPI/Swagger documentation endpoint is available (`/swagger/`).
-*   Basic error message localization framework established.
-*   Initial API tests implemented for Registration and Vehicles.
+*   Backend API: Stable base for Users, Vehicles, Mileage, Services, Predictions, Invoices.
+*   **Admin Dashboard:**
+    *   Project created using Vite (React + TS).
+    *   Tailwind CSS v4 and Shadcn UI installed and configured.
+    *   Basic layout components (`AppSidebar`, `SiteHeader`, etc.) and `LoginForm` added.
+    *   `react-router-dom` installed and basic routes (`/login`, `/`) configured.
+*   Backend Dependencies: JWT Auth, Password Reset, Validation (TN Phone/Plate), Basic Docs/Tests/Localization functional.
 
-## Completed Tasks
+## Completed Tasks (Recent Frontend Focus)
 
-*   **Core Backend Setup:** Django, DB (PostgreSQL), DRF, Initial Models, API v1 structure, Admin setup.
-*   **Authentication & User Mgmt:** JWT Login/Refresh, User Registration, Password Reset (console email), CustomerProfile model.
-*   **Models:** Vehicle (w/ owner, initial_mileage), MileageRecord, ServiceType, ServiceEvent, PredictionRule, ServicePrediction, CustomerProfile (w/ phone), Invoice (w/ file, amount).
-*   **Migrations:** All models migrated; Groups data migration (Cust/Admin).
-*   **Validation:** Tunisian License Plate (TU/RS), Tunisian Phone Number, Mileage Increase.
-*   **RBAC:** Created Customer/Admin groups; applied initial role permissions; removed Mechanic role.
-*   **Prediction Engine (Phase 1):** Signal-based logic; Avg Daily KM calculation; Initial record handling.
-*   **API:** Serializers and ViewSets for core models; URL routing.
-*   **File Uploads:** Configured MEDIA storage for Invoices.
-*   **Documentation:** Basic OpenAPI/Swagger setup (`drf-yasg`).
-*   **Localization:** Custom exception handler with basic French error dictionary.
-*   **Testing:** Basic `APITestCase` setup; Tests for Registration & Vehicle API; DB test permission fix.
-*   **Admin Interface:** Models registered, User profile inline.
-*   **Bug Fixes:** Resolved various migration, import, syntax, and test errors.
+*   **Admin Dashboard Setup:** Vite init, Tailwind config, Shadcn init, Component addition (Layout, Login Form), React Router install/setup, Node.js update via nvm.
+*   **(Previous Backend):** Core Models/API, Auth, Validation, RBAC (Cust/Admin), Predictions (Phase 1), Invoice Upload, Basic Docs/Tests/Localization, Password Reset, Bug Fixes.
 
-## Current Goals (Alignment with Rules)
+## Current Goals
 
-*   **API Response Format (`backend.mdc`):** Implement `{ data: ..., error: ..., metadata: ... }` structure.
-*   **Ethical AI / Corsor Rules (`project_rules.mdc`):** Implement explainability, privacy (encryption), accountability (audits), data governance (outlier detection).
-*   **Refine RBAC/Permissions:** Ensure comprehensive checks across all actions.
-*   **Enhance API:** Filtering, Pagination, detailed error codes/messages (French).
-*   **Enhance Testing:** Increase test coverage (models, predictions, other APIs).
-*   **Enhance Docs (`backend.mdc`):** Add detailed descriptions, examples, etc., to Swagger.
+*   **Admin Dashboard:**
+    *   Connect sidebar navigation links.
+    *   Integrate layout components into dashboard routes.
+    *   Implement basic login form state/mock logic.
+    *   Implement theme toggle (Dark/Light).
+*   **Backend (`Rule Alignment`):**
+    *   API Response Format (`backend.mdc`).
+    *   Ethical AI (`project_rules.mdc`: privacy, explainability, etc.).
+    *   Enhance API (Filtering, Pagination, Errors), Testing, Docs, Localization.
 
 ## Blockers/Risks
 
-*   Complexity of implementing the custom API response format.
-*   Complexity of implementing specific Ethical AI requirements (encryption, explainability).
+*   Complexity of Backend Rule Alignment tasks (API format, Ethical AI).
+*   Frontend-Backend API integration (Authentication, Data Fetching).
 
-## Next Steps (Rule Alignment Focus)
+## Next Steps
 
-1.  **API Response Format (`backend.mdc`):** Implement a custom renderer or middleware to enforce the `{ data: ..., error: ..., metadata: ... }` structure. **(High Impact for Rule Compliance)**
-2.  **Ethical AI - Privacy (`project_rules.mdc`):** Research and implement field-level encryption for sensitive User/Profile data (e.g., using `django-cryptography`).
-3.  **Enhance API Docs (`backend.mdc`):** Add detailed docstrings to Views/Serializers for better Swagger output; add example snippets.
-4.  **Enhance Testing:** Write tests for Mileage, Service, Prediction APIs.
-5.  **Refine Localization:** Expand the `FRENCH_ERRORS` dictionary. 
+1.  **Admin Dashboard:** Connect sidebar navigation using `Link` component.
+2.  **Admin Dashboard:** Integrate actual components (cards, charts, tables) into dashboard routes (e.g., replacing placeholder on `/`).
+3.  **Admin Dashboard:** Implement mock login logic in `LoginForm`.
+4.  **Backend (Parallel):** Continue work on API Response Format or Ethical AI privacy features.
+
+**Previous Backend Next Steps (Now Parallel/Background):**
+*   API Response Format (`backend.mdc`).
+*   Ethical AI - Privacy (`project_rules.mdc`).
+*   Enhance API Docs (`backend.mdc`).
+*   Enhance Testing.
+*   Refine Localization. 

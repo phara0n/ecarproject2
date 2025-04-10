@@ -71,4 +71,13 @@
 *   **Error Localization:** Created custom DRF exception handler (`core/exceptions.py`) with a basic dictionary for French translations; configured DRF to use it.
 *   **RBAC Simplification:** Removed 'Mechanics' group and related logic; simplified permissions to Customer/Admin where applicable.
 *   **Validation Fix:** Corrected Tunisian License Plate regex validator to accept both 'TU' and 'RS' formats.
-*   **Bug Fixes:** Resolved test failures related to database creation permissions, serializer User model references, and `write_only` field handling. 
+*   **Bug Fixes:** Resolved test failures related to database creation permissions, serializer User model references, and `write_only` field handling.
+
+*   **Admin Dashboard Setup (Vite + React + TS + Shadcn):**
+    *   Initialized project in `admin-dashboard/` using Vite (React + TypeScript template).
+    *   Installed and configured Tailwind CSS v4.
+    *   Installed and configured Shadcn UI (including path aliases).
+    *   Added basic dashboard layout components (`AppSidebar`, `SiteHeader`, etc.) and `LoginForm` component (likely from v0.dev).
+    *   Installed `react-router-dom`.
+    *   Configured basic routing in `main.tsx` and `App.tsx` for `/login` and `/` (dashboard layout with placeholder content).
+    *   Updated Node.js to latest LTS (v22+) using `nvm` to meet `react-router-dom` requirements and reinstalled dependencies. 

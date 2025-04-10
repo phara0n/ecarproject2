@@ -17,8 +17,8 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework_simplejwt.views import (
-    TokenObtainPairView,
-    TokenRefreshView,
+    TokenObtainPairView as BaseTokenObtainPairView,
+    TokenRefreshView as BaseTokenRefreshView,
 )
 # Import the new registration view
 from garage.views import RegisterView 
@@ -30,6 +30,8 @@ from django.conf.urls.static import static
 from rest_framework import permissions
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
+from rest_framework import status
 
 # --- drf-yasg Schema View Setup --- 
 schema_view = get_schema_view(
@@ -45,10 +47,87 @@ schema_view = get_schema_view(
    permission_classes=(permissions.AllowAny,),
 )
 
+# --- Custom JWT Views with Swagger Documentation ---
+
+@swagger_auto_schema(
+    tags=['Authentification'],
+    operation_summary="Obtenir les jetons JWT (Login)",
+    operation_description=(
+        "Authentifie un utilisateur avec son `username` et `password` et retourne des jetons JWT (access et refresh).\\n\\n"
+        "Le jeton `access` est utilisé pour authentifier les requêtes API suivantes.\\n"
+        "Le jeton `refresh` est utilisé pour obtenir un nouveau jeton `access` lorsque celui-ci expire (via `/api/v1/token/refresh/`)."
+    ),
+    # No explicit request_body needed, simplejwt serializer handles it
+    # request_body=openapi.Schema(...), 
+    responses={
+        status.HTTP_200_OK: openapi.Response(
+            description="Authentification réussie. Jetons JWT retournés.",
+            examples={
+                "application/json": {
+                    "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                    "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                }
+            }
+        ),
+        status.HTTP_401_UNAUTHORIZED: openapi.Response(
+            description="Échec de l'authentification. Identifiants invalides.",
+            examples={
+                "application/json": {
+                    "detail": "Aucun compte actif trouvé avec les identifiants fournis"
+                }
+            }
+        )
+    }
+)
+class TokenObtainPairView(BaseTokenObtainPairView):
+    """Custom view to add Swagger documentation to the JWT login endpoint."""
+    pass # Inherits functionality, just adds docs
+
+@swagger_auto_schema(
+    tags=['Authentification'],
+    operation_summary="Rafraîchir le jeton JWT access",
+    operation_description=(
+        "Utilise un jeton `refresh` valide pour obtenir un nouveau jeton `access`.\\n\\n"
+        "Ceci est utile lorsque le jeton `access` a expiré mais que le jeton `refresh` est toujours valide."
+    ),
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=['refresh'],
+        properties={
+            'refresh': openapi.Schema(type=openapi.TYPE_STRING, description="Le jeton refresh valide.")
+        }
+    ),
+    responses={
+        status.HTTP_200_OK: openapi.Response(
+            description="Nouveau jeton access généré.",
+            examples={
+                "application/json": {
+                    "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (nouveau jeton)"
+                }
+            }
+        ),
+        status.HTTP_401_UNAUTHORIZED: openapi.Response(
+            description="Échec du rafraîchissement. Jeton refresh invalide ou expiré.",
+            examples={
+                "application/json": {
+                    "detail": "Le jeton est invalide ou a expiré",
+                    "code": "token_not_valid"
+                }
+            }
+        )
+    }
+)
+class TokenRefreshView(BaseTokenRefreshView):
+    """Custom view to add Swagger documentation to the JWT refresh endpoint."""
+    pass # Inherits functionality, just adds docs
+
+# --- Main URL Patterns --- 
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     # API v1 URLs
-    path('api/v1/register/', RegisterView.as_view(), name='register'), # Add registration URL
+    path('api/v1/register/', RegisterView.as_view(), name='register'), 
+    # Use the custom views with docs
     path('api/v1/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/v1/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/v1/', include('garage.urls')), # Include garage app resource URLs
@@ -66,7 +145,8 @@ urlpatterns = [
          auth_views.PasswordResetCompleteView.as_view(template_name='password_reset/complete.html'),
          name='password_reset_complete'),
     # Swagger / OpenAPI URLs
-    path('swagger<format>/\.json|\.yaml', schema_view.without_ui(cache_timeout=0), name='schema-json'),
+    path('swagger.json', schema_view.without_ui(cache_timeout=0), name='schema-json'),
+    path('swagger.yaml', schema_view.without_ui(cache_timeout=0), name='schema-yaml'),
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
     # Add other app URLs or API versions here later

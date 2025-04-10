@@ -65,59 +65,95 @@ class IsCustomerUser(permissions.BasePermission):
 
 # --- User Registration View --- 
 
+@swagger_auto_schema(
+    tags=['Authentification'],
+    operation_summary="Enregistrer un nouveau compte client",
+    operation_description=(
+        "Crée un nouveau compte utilisateur (sera automatiquement assigné au groupe 'Customers') et son profil client associé.\\n\\n"
+        "**Champs Requis:**\\n"
+        "- `username`: Nom d'utilisateur unique.\\n"
+        "- `password`: Mot de passe.\\n"
+        "- `password2`: Confirmation du mot de passe (doit correspondre à `password`).\\n"
+        "- `email`: Adresse email unique.\\n"
+        "- `phone_number`: Numéro de téléphone tunisien (Format: +216 XX XXX XXX ou 216XXXXXXXX ou XX XXX XXX).\\n\\n"
+        "**Champs Optionnels:**\\n"
+        "- `first_name`: Prénom.\\n"
+        "- `last_name`: Nom de famille."
+    ),
+    request_body=RegisterSerializer,
+    responses={
+        status.HTTP_201_CREATED: openapi.Response(
+            description="Compte créé avec succès. Retourne les détails de l'utilisateur créé (sans le mot de passe).",
+            schema=UserSerializer, # Assuming UserSerializer shows basic user info
+            examples={
+                "application/json": {
+                    "id": 1,
+                    "username": "nouveau_client",
+                    "email": "client@example.com",
+                    "first_name": "Test",
+                    "last_name": "Client",
+                    "is_staff": False # Example field from UserSerializer
+                }
+            }
+        ),
+        status.HTTP_400_BAD_REQUEST: openapi.Response(
+            description="Erreur de validation des données fournies.",
+            examples={
+                "application/json": {
+                    "password": [
+                        "Les deux mots de passe ne correspondent pas."
+                    ],
+                    "email": [
+                        "utilisateur avec ce adresse e-mail existe déjà."
+                    ],
+                    "phone_number": [
+                         "Le numéro de téléphone doit être au format tunisien valide."
+                    ]
+                }
+            }
+        )
+    }
+)
 class RegisterView(generics.CreateAPIView):
-    """Crée un nouveau compte utilisateur (Client).
-
-    Accepte `username`, `password`, `password2`, `email`, `phone_number`, `first_name` (optionnel), `last_name` (optionnel).
-    Ajoute automatiquement l'utilisateur au groupe 'Customers'.
-    Crée le profil client associé avec le numéro de téléphone.
-    """
     queryset = User.objects.all()
     permission_classes = (permissions.AllowAny,) # Allow anyone to register
     serializer_class = RegisterSerializer
 
-    @swagger_auto_schema(
-        operation_summary="Enregistrer un nouveau compte client",
-        operation_description=(
-            "Crée un compte utilisateur et un profil client associé.\n\n"
-            "**Requiert:** `username`, `password`, `password2`, `email`, `phone_number` (+216 XX XXX XXX).\n"
-            "**Optionnel:** `first_name`, `last_name`."
+# --- Current User View ---
+
+@swagger_auto_schema(
+    tags=['Utilisateurs'],
+    operation_summary="Obtenir les détails de l'utilisateur connecté",
+    operation_description=(
+        "Retourne les informations de base (id, username, email, prénom, nom) de l'utilisateur actuellement authentifié via le jeton JWT."
+    ),
+    responses={
+        status.HTTP_200_OK: openapi.Response(
+            description="Détails de l'utilisateur connecté.",
+            schema=UserSerializer,
+            examples={
+                "application/json": {
+                    "id": 1,
+                    "username": "testclient",
+                    "email": "client@example.com",
+                    "first_name": "Test",
+                    "last_name": "Client"
+                }
+            }
         ),
-        request_body=RegisterSerializer,
-        responses={
-            status.HTTP_201_CREATED: openapi.Response(
-                description="Compte créé avec succès. Retourne les informations de l'utilisateur (sans mot de passe).", 
-                schema=UserSerializer, # Use UserSerializer for response schema
-                examples={
-                    "application/json": {
-                        # Assuming your UserSerializer outputs this structure
-                        "id": 1,
-                        "username": "nouveau_client",
-                        "email": "client@example.com",
-                        "first_name": "Test",
-                        "last_name": "Client"
-                    }
-                }
-            ),
-            status.HTTP_400_BAD_REQUEST: openapi.Response(
-                description="Erreur de validation (ex: mots de passe différents, format invalide, utilisateur/email existant)",
-                examples={
-                    "application/json": {
-                        # Example 1: Password mismatch
-                        "password": ["Les deux mots de passe ne correspondent pas."],
-                        # Example 2: Invalid phone format
-                        # "phone_number": ["Le numéro de téléphone doit être au format tunisien (ex: +216 20 123 456)."]
-                        # Example 3: Username already exists
-                        # "username": ["Un utilisateur avec ce nom d'utilisateur existe déjà."] 
-                    }
-                }
-            )
-        },
-        tags=['Authentification'] # Group this endpoint under 'Authentification' tag
-    )
-    def post(self, request, *args, **kwargs):
-        # The actual implementation is handled by CreateAPIView
-        return super().post(request, *args, **kwargs)
+        status.HTTP_401_UNAUTHORIZED: openapi.Response(
+            description="Authentification requise (jeton manquant ou invalide)."
+        )
+    }
+)
+class CurrentUserView(generics.RetrieveAPIView):
+    """Renvoie les détails de l'utilisateur actuellement authentifié."""
+    permission_classes = [permissions.IsAuthenticated] # Ensure user is logged in
+    serializer_class = UserSerializer
+
+    def get_object(self):
+        """Retourne l'objet utilisateur actuel (request.user)."""
+        return self.request.user
 
 # --- ViewSets --- 
 

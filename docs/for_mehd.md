@@ -37,4 +37,23 @@ We've made good progress setting up the foundation for the **Admin Dashboard** f
 **Next Steps (Frontend Phase Begins):**
 We are now starting the frontend development phase. We need to decide whether to begin with the React Native mobile app for customers or the React + Shadcn admin dashboard. Backend rule alignment tasks (API format, privacy) will continue in parallel.
 
-**Next Steps (Prioritizing Rule Compliance):** The most impactful next step for rule alignment is likely addressing the API Response Format (`{data, error, metadata}`) required by `backend.mdc`. After that, implementing Privacy rules (data encryption) and enhancing the API Docs/Tests/Localization are important. 
+**Next Steps (Prioritizing Rule Compliance):** The most impactful next step for rule alignment is likely addressing the API Response Format (`{data, error, metadata}`) required by `backend.mdc`. After that, implementing Privacy rules (data encryption) and enhancing the API Docs/Tests/Localization are important.
+
+# Admin Web Frontend Setup (for Mehd)
+
+- Started fresh for the admin web frontend.
+- Created a new React (v19) + TypeScript project using Vite inside `ecar-project/admin-web`.
+- Successfully installed and configured Tailwind CSS v4.
+- Initialized Shadcn UI.
+- The base project is ready for development.
+
+## API Documentation Status (2024-07-29)
+
+*   Checked the project for API documentation as per `backend.mdc` rules.
+*   Found `drf-yasg` configured in `backend/core/urls.py`, generating OpenAPI/Swagger docs.
+*   Live docs should be available at `/swagger/` and `/redoc/` when the server runs.
+*   Basic structure (paths, methods, serializers, versioning) is documented automatically.
+*   **Conclusion:** Documentation exists but needs significant enhancement to meet the rule's requirements for detailed descriptions, multi-language examples, standard response format proof, French error examples, etc. Recommend reviewing the live docs and then improving the docstrings in the backend code.
+*   **Update (2024-07-29):** Added detailed Swagger documentation (`@swagger_auto_schema`) to authentication endpoints (`/register`, `/token`, `/token/refresh`) in `garage/views.py` and `core/urls.py` to clarify usage for the frontend.
+*   **Update (2024-07-29):** Generated a static `swagger.json` file from the running server and saved it to `docs/swagger.json`.
+*   **Update (2024-07-29):** Created a new API endpoint `GET /api/v1/users/me/` to allow authenticated users to fetch their own details. 

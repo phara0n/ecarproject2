@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { cn } from "@/lib/utils"; // Utility for combining class names
-import { LayoutDashboard, Car, Wrench, Users, Settings, LogOut } from 'lucide-react'; // Import icons
+import { LayoutDashboard, Car, Wrench, Users, Settings, LogOut, FileText, Gauge } from 'lucide-react'; // Import icons
 
 const Sidebar = () => {
   const iconProps = { className: "mr-2 h-4 w-4" }; // Common icon props
@@ -11,6 +11,8 @@ const Sidebar = () => {
     { href: '/vehicles', label: 'Véhicules', icon: <Car {...iconProps} /> },
     { href: '/services', label: 'Services', icon: <Wrench {...iconProps} /> },
     { href: '/customers', label: 'Clients', icon: <Users {...iconProps} /> },
+    { href: '/factures', label: 'Factures', icon: <FileText {...iconProps} /> },
+    { href: '/mileage', label: 'Suivi Kilométrique', icon: <Gauge {...iconProps} /> },
     { href: '/settings', label: 'Paramètres', icon: <Settings {...iconProps} /> },
   ];
 

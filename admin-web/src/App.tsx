@@ -7,7 +7,12 @@ import { ThemeProvider } from '@/components/theme-provider';
 import AppLayout from '@/components/layout/AppLayout';
 import LoginPage from '@/pages/LoginPage';
 import DashboardPage from '@/pages/DashboardPage';
-import VehiclesPage from '@/pages/VehiclesPage'; // Import VehiclesPage
+import VehiclesPage from '@/pages/VehiclesPage';
+import ServicesPage from '@/pages/ServicesPage';
+import CustomersPage from '@/pages/CustomersPage';
+import FacturesPage from '@/pages/FacturesPage';
+import SuiviKilometrique from '@/pages/SuiviKilometrique';
+import SettingsPage from '@/pages/SettingsPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 
 // Layout wrapper for protected routes
@@ -67,11 +72,12 @@ function App() {
           <Route element={<ProtectedLayout />}>
             {/* Routes requiring the AppLayout go here */}
             <Route path="/" element={<DashboardPage />} />
-            <Route path="/vehicles" element={<VehiclesPage />} /> {/* Add vehicles route */}
-            {/* Add other protected routes here, e.g.: */}
-            {/* <Route path="/services" element={<ServicesPage />} /> */}
-            {/* <Route path="/customers" element={<CustomersPage />} /> */}
-            {/* <Route path="/settings" element={<SettingsPage />} /> */}
+            <Route path="/vehicles" element={<VehiclesPage />} />
+            <Route path="/services" element={<ServicesPage />} />
+            <Route path="/customers" element={<CustomersPage />} />
+            <Route path="/factures" element={<FacturesPage />} />
+            <Route path="/mileage" element={<SuiviKilometrique />} />
+            <Route path="/settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<NotFoundPage />} /> {/* Catch-all route */}
         </Routes>

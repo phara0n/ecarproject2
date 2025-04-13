@@ -6,23 +6,31 @@ import { PlusIcon, FilterIcon, RefreshCw, AlertCircle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useAuth } from '@/context/AuthProvider';
+import AddVehicleModal from '@/components/vehicles/AddVehicleModal';
+import { VehicleDetailsModal } from '@/components/vehicles/VehicleDetailsModal';
 
 // Define the Vehicle interface based on the actual API response
 interface Vehicle {
   id: number;
   // Field names adapted based on API response (snake_case)
-  immatriculation?: string; // Expected actual field name
-  marque?: string; // Expected actual field name
-  modele?: string; // Expected actual field name
-  annee?: number; // Expected actual field name
-  kilometrage?: number; // Expected actual field name
-  km_quotidien_moyen?: number; // Expected actual field name
-  license_plate?: string; // Fallback field name
-  brand?: string; // Fallback field name
-  model?: string; // Fallback field name
-  year?: number; // Fallback field name
-  mileage?: number; // Fallback field name
-  avg_daily_km?: number; // Fallback field name
+  registration_number?: string; // Actual field for Plaque
+  make?: string;              // Actual field for Marque
+  model?: string;             // Actual field for Modèle
+  year?: number;              // Actual field for Année
+  initial_mileage?: number;   // Actual field for Mileage (Note: this is initial, not necessarily current)
+  average_daily_km?: number;  // Now available from backend
+  // km_quotidien_moyen / avg_daily_km is missing from the API response
+  // Original/Fallback names kept for reference, but might be removed later if API is consistent
+  immatriculation?: string; 
+  marque?: string; 
+  modele?: string; 
+  annee?: number; 
+  kilometrage?: number; 
+  km_quotidien_moyen?: number;
+  license_plate?: string; 
+  brand?: string; 
+  mileage?: number;
+  avg_daily_km?: number; 
 }
 
 const VehiclesPage = () => {
@@ -30,6 +38,9 @@ const VehiclesPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
   // Function to fetch vehicles from the API
   const fetchVehicles = async () => {
@@ -98,17 +109,21 @@ const VehiclesPage = () => {
     
     // Safely calculate average mileage with several field possibilities
     const totalMileage = vehicles.reduce((sum, v) => {
-      const mileage = getVehicleField(v, ['kilometrage', 'mileage'], '0');
+      // Using 'initial_mileage' as primary - might need current mileage from another source later
+      const mileage = getVehicleField(v, ['initial_mileage'], '0');
       return sum + (Number(mileage) || 0);
     }, 0);
     const avgMileage = Math.round(totalMileage / totalVehicles);
     
     // Safely calculate average daily km with several field possibilities
     const totalDailyKm = vehicles.reduce((sum, v) => {
-      const dailyKm = getVehicleField(v, ['km_quotidien_moyen', 'avg_daily_km'], '0');
+      // Use the field name from backend
+      const dailyKm = getVehicleField(v, ['average_daily_km'], '0');
       return sum + (Number(dailyKm) || 0);
     }, 0);
-    const avgDailyKm = Math.round(totalDailyKm / totalVehicles);
+    // Avoid division by zero if all vehicles have 0 daily km
+    const validDailyKmCount = vehicles.filter(v => Number(getVehicleField(v, ['average_daily_km'], '0')) > 0).length;
+    const avgDailyKm = validDailyKmCount > 0 ? Math.round(totalDailyKm / validDailyKmCount) : 0;
 
     return { totalVehicles, avgMileage, avgDailyKm };
   };
@@ -121,6 +136,23 @@ const VehiclesPage = () => {
     return num !== undefined && num !== null && !isNaN(num)
       ? num.toLocaleString('fr-FR') 
       : '0';
+  };
+
+  // Function to handle opening the details modal
+  const handleViewDetails = (vehicle: Vehicle) => {
+    console.log("[VehiclesPage] handleViewDetails called for vehicle:", vehicle);
+    console.log("[VehiclesPage] Vehicle owner_username:", vehicle.owner_username);
+    setSelectedVehicle(vehicle);
+    setIsDetailsModalOpen(true);
+    console.log("[VehiclesPage] isDetailsModalOpen state set to true");
+  };
+
+  // Function to handle editing a vehicle
+  const handleEditVehicle = (vehicle: Vehicle) => {
+    console.log("[VehiclesPage] handleEditVehicle called for vehicle:", vehicle);
+    setSelectedVehicle(vehicle);
+    // Show the details modal with editing mode
+    setIsDetailsModalOpen(true);
   };
 
   return (
@@ -136,7 +168,7 @@ const VehiclesPage = () => {
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Actualiser
           </Button>
-          <Button>
+          <Button onClick={() => setIsAddModalOpen(true)}>
             <PlusIcon className="w-4 h-4 mr-2" />
             Nouveau Véhicule
           </Button>
@@ -214,7 +246,7 @@ const VehiclesPage = () => {
                   <TableHead>Marque</TableHead>
                   <TableHead>Modèle</TableHead>
                   <TableHead>Année</TableHead>
-                  <TableHead>Kilométrage</TableHead>
+                  <TableHead>Kilométrage Initial</TableHead>
                   <TableHead>Moyenne (km/jour)</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
@@ -238,31 +270,23 @@ const VehiclesPage = () => {
                   vehicles.map((vehicle) => (
                     <TableRow key={vehicle.id}>
                       <TableCell className="font-medium">
-                        {getVehicleField(vehicle, ['immatriculation', 'license_plate'])}
+                        {/* Use registration_number first */}
+                        {getVehicleField(vehicle, ['registration_number', 'immatriculation', 'license_plate'])}
+                      </TableCell>
+                      <TableCell>{getVehicleField(vehicle, ['make', 'marque', 'brand'])}</TableCell>
+                      <TableCell>{getVehicleField(vehicle, ['model', 'modele'])}</TableCell>
+                      <TableCell>{getVehicleField(vehicle, ['year', 'annee'])}</TableCell>
+                      <TableCell>
+                        {/* Use initial_mileage first - needs clarification if CURRENT mileage is needed */}
+                        {formatNumber(getVehicleField(vehicle, ['initial_mileage'], '0'))} km
                       </TableCell>
                       <TableCell>
-                        {getVehicleField(vehicle, ['marque', 'brand'])}
+                        {/* Use average_daily_km directly */}
+                        {formatNumber(getVehicleField(vehicle, ['average_daily_km'], '0'))} km/jour
                       </TableCell>
                       <TableCell>
-                        {getVehicleField(vehicle, ['modele', 'model'])}
-                      </TableCell>
-                      <TableCell>
-                        {getVehicleField(vehicle, ['annee', 'year'])}
-                      </TableCell>
-                      <TableCell>
-                        {getVehicleField(vehicle, ['kilometrage', 'mileage'], '-') !== '-' 
-                          ? `${formatNumber(getVehicleField(vehicle, ['kilometrage', 'mileage']))} km`
-                          : '-'
-                        }
-                      </TableCell>
-                      <TableCell>
-                        {getVehicleField(vehicle, ['km_quotidien_moyen', 'avg_daily_km'], '-') !== '-'
-                          ? `${getVehicleField(vehicle, ['km_quotidien_moyen', 'avg_daily_km'])} km/jour`
-                          : '-'
-                        }
-                      </TableCell>
-                      <TableCell>
-                        <Button variant="outline" size="sm">Détails</Button>
+                        {/* Placeholder for actions */}
+                        <Button variant="outline" size="sm" onClick={() => handleViewDetails(vehicle)}>Détails</Button>
                       </TableCell>
                     </TableRow>
                   ))
@@ -279,6 +303,22 @@ const VehiclesPage = () => {
           </CardContent>
         </Card>
       </div>
+
+      <AddVehicleModal
+        isOpen={isAddModalOpen}
+        onOpenChange={setIsAddModalOpen}
+        onVehicleAdded={() => {
+          fetchVehicles(); // Refresh the list when a vehicle is added
+        }}
+      />
+      
+      {selectedVehicle && (
+        <VehicleDetailsModal
+          isOpen={isDetailsModalOpen}
+          onOpenChange={setIsDetailsModalOpen}
+          vehicle={selectedVehicle}
+        />
+      )}
     </div>
   );
 };

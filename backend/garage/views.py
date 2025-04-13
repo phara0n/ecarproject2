@@ -5,7 +5,7 @@ from .models import Vehicle, MileageRecord, ServiceType, ServiceEvent, Predictio
 from .serializers import (
     VehicleSerializer, MileageRecordSerializer, ServiceTypeSerializer, 
     ServiceEventSerializer, PredictionRuleSerializer, ServicePredictionSerializer,
-    RegisterSerializer, UserSerializer, InvoiceSerializer
+    RegisterSerializer, UserSerializer, InvoiceSerializer, CustomerListSerializer
 )
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.db import transaction
@@ -15,6 +15,8 @@ from drf_yasg import openapi
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework import serializers
+from django.contrib.auth.models import Group
+from rest_framework import exceptions
 
 # Get User model instance
 User = get_user_model()
@@ -148,12 +150,27 @@ class RegisterView(generics.CreateAPIView):
 )
 class CurrentUserView(generics.RetrieveAPIView):
     """Renvoie les détails de l'utilisateur actuellement authentifié."""
-    permission_classes = [permissions.IsAuthenticated] # Ensure user is logged in
+    permission_classes = [permissions.IsAuthenticated] # Restore permission check
     serializer_class = UserSerializer
 
     def get_object(self):
         """Retourne l'objet utilisateur actuel (request.user)."""
-        return self.request.user
+        user = self.request.user
+        print(f"--- CurrentUserView --- START") # Added log
+        print(f"Request Headers: {self.request.headers}") # Added log
+        print(f"Request User: {user}") # Added log
+        print(f"Is Authenticated: {user.is_authenticated if user else 'N/A'}") # Added log
+
+        if not user or not user.is_authenticated:
+             # This check is technically redundant due to permission_classes,
+             # but helps confirm the state if something unexpected happens.
+             print(f"WARNING: CurrentUserView accessed but request.user is not authenticated! User: {user}")
+             # Raising NotAuthenticated is more appropriate than letting it potentially 404
+             raise exceptions.NotAuthenticated("Authentification requise ou invalide pour accéder à cet utilisateur.")
+
+        print(f"CurrentUserView: Fetching details for user: {user.username} (ID: {user.id})")
+        print(f"--- CurrentUserView --- END") # Added log
+        return user
 
 # --- ViewSets --- 
 
@@ -249,13 +266,12 @@ class VehicleViewSet(viewsets.ModelViewSet):
 
     @transaction.atomic # Ensure Vehicle and MileageRecord creation are atomic
     def perform_create(self, serializer):
-        """Associate the vehicle with the logged-in user upon creation
-           and create the initial mileage record.
-        """
-        # Save the vehicle instance first, associated with the user
-        vehicle = serializer.save(owner=self.request.user)
-        
-        # Now, create the initial MileageRecord for this vehicle
+        """Sauvegarde le véhicule et crée le premier relevé de kilométrage."""
+        # Le propriétaire est maintenant défini via owner_id dans le serializer
+        # vehicle = serializer.save(owner=self.request.user)
+        vehicle = serializer.save() # Owner is set via owner_id passed in validated_data
+
+        # Crée le premier MileageRecord basé sur initial_mileage
         MileageRecord.objects.create(
             vehicle=vehicle,
             mileage=vehicle.initial_mileage,
@@ -859,4 +875,141 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         }
     )
     def destroy(self, request, *args, **kwargs):
+        return super().destroy(request, *args, **kwargs)
+
+# --- Customer List View ---
+
+@swagger_auto_schema(
+    tags=['Utilisateurs'],
+    operation_summary="Lister les clients",
+    operation_description="Retourne une liste des utilisateurs appartenant au groupe 'Customers'. Requiert une authentification admin.",
+    responses={
+        status.HTTP_200_OK: openapi.Response(
+            description="Liste des clients (ID et Username).",
+            schema=openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                        'username': openapi.Schema(type=openapi.TYPE_STRING)
+                    }
+                )
+            ),
+            examples={ "application/json": [ { "id": 2, "username": "ali" }, { "id": 3, "username": "fatma" } ] }
+        ),
+        status.HTTP_403_FORBIDDEN: "Permission refusée (non admin)."
+    }
+)
+class CustomerListView(generics.ListAPIView):
+    """
+    Vue API pour lister les utilisateurs dans le groupe 'Customers'.
+    Accessible uniquement par les administrateurs.
+    """
+    serializer_class = CustomerListSerializer # <-- Use the new serializer
+    permission_classes = [permissions.IsAdminUser] # Only admins can list customers
+
+    def get_queryset(self):
+        """Retourne les utilisateurs du groupe 'Customers'."""
+        print("--- CustomerListView --- get_queryset START") # Added log
+        queryset = User.objects.none() # Default to empty
+        try:
+            print("Attempting to get 'Customers' group...") # Added log
+            customer_group = Group.objects.get(name='Customers')
+            print(f"'Customers' group found: {customer_group}") # Added log
+            queryset = User.objects.filter(groups=customer_group).order_by('username')
+            print(f"Queryset created, count: {queryset.count()}") # Added log
+        except Group.DoesNotExist:
+            print("ERROR: 'Customers' group does not exist.") # Enhanced log
+            # Keep queryset as User.objects.none()
+        except Exception as e:
+             print(f"ERROR: An unexpected error occurred in get_queryset: {e}") # Added general exception log
+
+        print("--- CustomerListView --- get_queryset END") # Added log
+        return queryset
+
+# --- User Management ViewSet (Admin Only) ---
+
+@swagger_auto_schema(
+    tags=['Utilisateurs (Admin)'],
+    operation_description="Gestion complète des utilisateurs (CRUD). Réservé aux administrateurs."
+)
+class UserViewSet(viewsets.ModelViewSet):
+    """
+    Vue API pour gérer les utilisateurs (CRUD).
+    Accessible uniquement par les administrateurs.
+    Permet de lister, récupérer, mettre à jour et supprimer des utilisateurs.
+    La création est gérée séparément par la vue RegisterView.
+    """
+    queryset = User.objects.all().order_by('id')
+    serializer_class = UserSerializer
+    permission_classes = [permissions.IsAdminUser] # Only admins can manage users
+
+    # Note: The 'create' action is effectively disabled here by permissions
+    # if RegisterView is the intended way for users to be created.
+    # Admins *can* technically create users via this endpoint if needed,
+    # but it won't assign them to the 'Customers' group automatically like RegisterSerializer.
+
+    @swagger_auto_schema(
+        operation_summary="Lister tous les utilisateurs (Admin)",
+        operation_description="Retourne la liste de tous les utilisateurs enregistrés. Réservé aux administrateurs.",
+        responses={status.HTTP_200_OK: UserSerializer(many=True)}
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+
+    @swagger_auto_schema(
+        operation_summary="Récupérer un utilisateur spécifique (Admin)",
+        operation_description="Retourne les détails d'un utilisateur spécifique par son ID. Réservé aux administrateurs.",
+        responses={
+            status.HTTP_200_OK: UserSerializer,
+            status.HTTP_404_NOT_FOUND: "Utilisateur non trouvé."
+        }
+    )
+    def retrieve(self, request, *args, **kwargs):
+        return super().retrieve(request, *args, **kwargs)
+
+    @swagger_auto_schema(
+        operation_summary="Mettre à jour un utilisateur (Admin)",
+        operation_description="Met à jour complètement les informations d'un utilisateur. Réservé aux administrateurs.",
+        request_body=UserSerializer,
+        responses={
+            status.HTTP_200_OK: UserSerializer,
+            status.HTTP_400_BAD_REQUEST: "Données invalides.",
+            status.HTTP_404_NOT_FOUND: "Utilisateur non trouvé."
+        }
+    )
+    def update(self, request, *args, **kwargs):
+        # Potential enhancement: Prevent admins from changing their own is_staff/is_superuser status?
+        # Potential enhancement: Ensure email/username uniqueness validation works as expected on update.
+        return super().update(request, *args, **kwargs)
+
+    @swagger_auto_schema(
+        operation_summary="Mettre à jour partiellement un utilisateur (Admin)",
+        operation_description="Met à jour partiellement les informations d'un utilisateur. Réservé aux administrateurs.",
+        request_body=UserSerializer, # Note: Schema might not reflect partial nature well in Swagger UI
+        responses={
+            status.HTTP_200_OK: UserSerializer,
+            status.HTTP_400_BAD_REQUEST: "Données invalides.",
+            status.HTTP_404_NOT_FOUND: "Utilisateur non trouvé."
+        }
+    )
+    def partial_update(self, request, *args, **kwargs):
+        return super().partial_update(request, *args, **kwargs)
+
+    @swagger_auto_schema(
+        operation_summary="Supprimer un utilisateur (Admin)",
+        operation_description="Supprime un utilisateur du système. Réservé aux administrateurs.",
+        responses={
+            status.HTTP_204_NO_CONTENT: "Utilisateur supprimé avec succès.",
+            status.HTTP_404_NOT_FOUND: "Utilisateur non trouvé."
+            # Potential enhancement: Prevent admins from deleting themselves?
+        }
+    )
+    def destroy(self, request, *args, **kwargs):
+        # Prevent admin from deleting themselves?
+        # instance = self.get_object()
+        # if instance == request.user:
+        #     return Response({"detail": "Vous ne pouvez pas supprimer votre propre compte administrateur."},
+        #                     status=status.HTTP_403_FORBIDDEN)
         return super().destroy(request, *args, **kwargs)

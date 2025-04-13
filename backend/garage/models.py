@@ -39,6 +39,13 @@ class Vehicle(models.Model):
     )
     vin = models.CharField(max_length=17, unique=True, null=True, blank=True, verbose_name="VIN") # Vehicle Identification Number
     initial_mileage = models.PositiveIntegerField(verbose_name="Kilométrage Initial") # Add initial mileage
+    # Add the new field here
+    average_daily_km = models.FloatField(
+        null=True,
+        blank=True, # Allow blank in forms/admin
+        default=None, # Default to None (unknown/not calculated)
+        verbose_name="Moyenne Kilométrage Journalier (km/jour)"
+    )
     # Add owner relationship if needed, e.g., ForeignKey to User or a Customer model
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

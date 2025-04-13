@@ -23,6 +23,7 @@ from rest_framework_simplejwt.views import (
 # Import the new registration view
 from garage.views import RegisterView 
 from django.contrib.auth import views as auth_views # Import auth views
+from garage.views import CurrentUserView # Added import for CurrentUserView
 
 # Imports for serving media files during development
 from django.conf import settings
@@ -130,6 +131,7 @@ urlpatterns = [
     # Use the custom views with docs
     path('api/v1/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/v1/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/v1/users/me/', CurrentUserView.as_view(), name='current-user'),
     path('api/v1/', include('garage.urls')), # Include garage app resource URLs
     # Password Reset URLs (using Django's built-in views)
     path('password-reset/',

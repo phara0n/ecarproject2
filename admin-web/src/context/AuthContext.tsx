@@ -20,6 +20,13 @@ interface AuthContextType {
   login: (credentials: { username: string; password: string }) => Promise<void>; // Async for API call
   logout: () => void;
   checkAuthStatus: () => Promise<void>; // Async for potential API call
+  refreshToken: () => Promise<string | undefined>; // Async function to refresh the expired token, returns the new token
+  authAxios: {
+    get: (url: string, config?: any) => Promise<any>;
+    post: (url: string, data?: any, config?: any) => Promise<any>;
+    put: (url: string, data?: any, config?: any) => Promise<any>;
+    delete: (url: string, config?: any) => Promise<any>;
+  };
 }
 
 // Create the context with a default value (initially undefined, or null state)
@@ -44,4 +51,7 @@ interface AuthProviderProps {
 // export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => { ... };
 
 // Export the context itself if needed elsewhere, though using the hook is preferred
-export default AuthContext; 
+export default AuthContext;
+
+// Export User interface for reuse
+export type { User, AuthContextType }; 

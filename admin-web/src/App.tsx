@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Route, Routes, Outlet, Navigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthProvider'; // Import useAuth
 import { ThemeProvider } from '@/components/theme-provider';
+import { Toaster } from "@/components/ui/sonner"; // Import Sonner Toaster
 
 // Import layout and page components
 import AppLayout from '@/components/layout/AppLayout';
@@ -82,6 +83,7 @@ function App() {
           <Route path="*" element={<NotFoundPage />} /> {/* Catch-all route */}
         </Routes>
       </Router>
+      <Toaster /> {/* Add the Toaster component here */}
     </ThemeProvider>
   );
 }

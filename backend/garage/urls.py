@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     VehicleViewSet, MileageRecordViewSet, ServiceTypeViewSet, 
     ServiceEventViewSet, PredictionRuleViewSet, ServicePredictionViewSet,
-    InvoiceViewSet, RegisterView, CurrentUserView
+    InvoiceViewSet, CustomerListView, UserViewSet
 )
 
 # Create a router and register our viewsets with it.
@@ -15,9 +15,12 @@ router.register(r'service-events', ServiceEventViewSet, basename='serviceevent')
 router.register(r'prediction-rules', PredictionRuleViewSet, basename='predictionrule')
 router.register(r'service-predictions', ServicePredictionViewSet, basename='serviceprediction')
 router.register(r'invoices', InvoiceViewSet, basename='invoice')
+router.register(r'users', UserViewSet, basename='user')
 
 # The API URLs are now determined automatically by the router.
 urlpatterns = [
-    path('users/me/', CurrentUserView.as_view(), name='current-user'),
+    # Add URL for listing customers (admins only) FIRST
+    path('users/customers/', CustomerListView.as_view(), name='customer-list'),
+    # Include router URLs AFTER specific paths
     path('', include(router.urls)),
 ] 

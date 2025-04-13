@@ -18,23 +18,31 @@ class VehicleSerializer(serializers.ModelSerializer):
     # Display username for readability, but make owner read-only in the serializer
     # It will be set automatically in the view based on the logged-in user.
     owner_username = serializers.CharField(source='owner.username', read_only=True)
+    # Make owner writable via its ID for creation/update
+    owner_id = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(), source='owner', write_only=True, 
+        label="ID Propriétaire"
+    )
 
     class Meta:
         model = Vehicle
         fields = [
             'id', 
-            'owner', # Keep the ID for potential filtering/linking
-            'owner_username', # Readable username
+            # 'owner', # Keep original read-only nested or pk representation if needed later 
+            'owner_id', # Writable field for setting the owner
+            'owner_username', # Readable username (read-only)
             'make', 
             'model', 
             'year', 
             'registration_number', 
             'vin', 
             'initial_mileage', # Add initial_mileage
+            'average_daily_km', # <--- Add the new field here
             'created_at', 
             'updated_at'
         ]
-        read_only_fields = ['id', 'owner', 'created_at', 'updated_at']
+        # Owner is now writable via owner_id
+        read_only_fields = ['id', 'owner_username', 'average_daily_km', 'created_at', 'updated_at']
 
 class MileageRecordSerializer(serializers.ModelSerializer):
     """Serializer for the MileageRecord model."""
@@ -107,6 +115,8 @@ class ServiceEventSerializer(serializers.ModelSerializer):
     )
     vehicle_info = VehicleSerializer(source='vehicle', read_only=True)
     service_type_info = ServiceTypeSerializer(source='service_type', read_only=True)
+    # Explicitly define event_date to handle representation
+    event_date = serializers.DateField()
 
     class Meta:
         model = ServiceEvent
@@ -182,6 +192,17 @@ class UserSerializer(serializers.ModelSerializer):
         model = User # Use the actual User model class
         fields = ['id', 'username', 'email', 'first_name', 'last_name']
 
+# --- Minimal Customer List Serializer ---
+class CustomerListSerializer(serializers.ModelSerializer):
+    """Minimal serializer for listing customers (ID, Username, First/Last Name, Email, Phone)."""
+    # Get phone number from related CustomerProfile
+    phone_number = serializers.CharField(source='customerprofile.phone_number', read_only=True)
+
+    class Meta:
+        model = User
+        # Add first_name, last_name, email, and phone_number to the fields list
+        fields = ['id', 'username', 'first_name', 'last_name', 'email', 'phone_number']
+
 class RegisterSerializer(serializers.ModelSerializer):
     """Serializer for user registration."""
     # Explicit fields are needed for validation/write_only
@@ -192,12 +213,11 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User 
-        # List all fields needed for input AND fields from User model for output
-        fields = ('username', 'password', 'password2', 'email', 'first_name', 'last_name', 'phone_number') # Add phone_number back
+        # Add 'id' to the fields tuple to include it in the response
+        fields = ('id', 'username', 'password', 'password2', 'email', 'first_name', 'last_name', 'phone_number') 
         extra_kwargs = {
             'first_name': {'required': False},
             'last_name': {'required': False}
-            # write_only handled by explicit field declarations above
         }
 
     def validate(self, attrs):
@@ -236,7 +256,8 @@ class RegisterSerializer(serializers.ModelSerializer):
             print("ERROR: 'Customers' group not found during registration.")
             pass 
 
-        return user # Return the created user instance 
+        # Ensure the created user instance is returned
+        return user 
 
 # --- Invoice Serializer --- 
 

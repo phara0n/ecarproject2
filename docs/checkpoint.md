@@ -1,125 +1,143 @@
-# ECAR Project Checkpoint
+# E-Car Admin Portal - Development Checkpoint
+**Last Updated: August 15, 2024**
 
-**Last Updated: 2024-08-06**
+## Project Status
+- **Status**: In Progress
+- **Focus Areas**: API integration fixes, UI/UX improvements
 
-## Project Overview
-ECAR is a web-based garage management system for the Tunisian market. It allows garage owners to manage vehicles, customers, services, invoices, and mileage tracking.
+## Component Status
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Login Screen | ✅ Working | Authentication works correctly |
+| Vehicle Details Modal | ✅ Working | Recently fixed dark mode contrast issues |
+| Vehicles List | ✅ Working | Pagination and filter working |
+| Customers Management | ✅ Working | Client creation fixed, edit/delete still has issues |
+| Service Events | ✅ Working | Can view but some API issues |
+| Service History | 🚧 Not Started | On the roadmap |
+| Invoices | ✅ Working | Can view and download |
+| Notifications | 🚧 Not Started | On the roadmap |
 
-## Technology Stack
-- **Backend**: Django with Django REST Framework
-- **Frontend**: React 19, TypeScript, Vite, Shadcn UI
-- **Authentication**: JWT with token refresh
+## API Integration Status
+| Endpoint | Status | Notes |
+|----------|--------|-------|
+| `/api/v1/token/` | ✅ Working | Authentication working correctly |
+| `/api/v1/token/refresh/` | ✅ Working | Token refresh mechanism functional |
+| `/api/v1/vehicles/` | ✅ Working | Successfully fetches vehicle data |
+| `/api/v1/services/` | ✅ Working | Service events listing works |
+| `/api/v1/users/customers/` | ✅ Working | GET customer list working |
+| `/api/v1/register/` | ✅ Working | Fixed for client creation |
+| `/api/v1/users/{id}/` | ✅ Working | Edit/delete operations working |
+| `/api/v1/invoices/` | ✅ Working | Invoice listing works |
+| `/api/v1/users/{id}/reset-password/` | 🔄 Integration pending | Frontend implemented |
 
-## Current Status
+## Recent Fixes
 
-### API Endpoints Status
-| Endpoint | Status | Integration Status |
-|----------|--------|-------------------|
-| `/api/v1/vehicles/` | ✅ Available | ✅ Integrated |
-| `/api/v1/users/me/` | ✅ Available | ✅ Integrated (as Customers) |
-| `/api/v1/invoices/` | ✅ Available | ✅ Integrated |
-| `/api/v1/mileage-records/` | ✅ Available | ✅ Integrated |
-| `/api/v1/services/` | ❌ Not Available | ⏳ Pending backend implementation |
-| `/api/v1/customers/` | ❌ Not Available | ⏳ Using users/me as alternative |
+1. **Vehicle Management Enhancement**:
+   - Added vehicle editing functionality with form validation
+   - Implemented PUT requests to update vehicle information
+   - Enhanced vehicle details modal with edit/view mode toggle
+   - Added direct edit button access from the vehicles list
 
-### Frontend Pages Status
-| Page | UI Status | API Integration | Features |
-|------|-----------|----------------|----------|
-| Dashboard | ✅ Basic layout | ⏳ Partial | Statistics cards, recent activity |
-| Vehicles | ✅ Complete | ✅ Full | List, search, stats cards |
-| Customers | ✅ Complete | ✅ Full | List, search, stats cards |
-| Services | ✅ Complete | ❌ Pending | UI ready, waiting for API |
-| Factures | ✅ Complete | ✅ Full | List, search, stats cards |
-| Suivi Kilométrique | ✅ Complete | ✅ Full | List, search, mileage tracking |
-| Settings | ✅ Basic layout | ❌ Pending | Profile, preferences tabs |
+2. **Client Management Enhancement**:
+   - Added password reset functionality for administrators
+   - Improved client creation using the correct `/api/v1/register/` endpoint
+   - Fixed client deletion and editing by using correct endpoint pattern
+   - Added temporary password generation with appropriate complexity
 
-### Authentication System
-- ✅ Login/Logout functionality
-- ✅ JWT token storage
-- ✅ Automatic token refresh
-- ✅ Protected routes
-- ✅ Redirect for unauthenticated users
+3. **Vehicle Details Modal**:
+   - Fixed contrast issues in dark mode
+   - Enhanced customer data display
+   - Improved accessibility with keyboard navigation
+   - Added detailed service recommendations
+   - Added edit functionality for vehicle properties
 
-### Recent Improvements
+## Immediate Tasks
 
-#### CustomersPage Enhancements
-- Updated to use `/api/v1/users/me/` endpoint instead of non-existent `/api/v1/customers/`
-- Implemented comprehensive error handling with user-friendly alerts
-- Added loading states with Skeleton components
-- Created formatting helpers for consistent data presentation
-- Improved search functionality across all user fields
-- Added statistics cards showing user metrics
+1. **Backend API Development**:
+   - Implement the password reset endpoint at `/api/v1/users/{id}/reset-password/`
+   - Add appropriate validation and security checks
 
-#### Vehicles Page Improvements
-- Solved field mapping issues between API response and frontend expectations
-- Implemented flexible field access with fallbacks for both French and English field names
-- Added comprehensive error handling and loading states
+2. **Service History**:
+   - Implement service history view in vehicle details
+   - Create filtering and sorting capabilities
 
-### Established Patterns
-We've established consistent patterns for API integration:
-1. Flexible interfaces supporting multiple field names (French/English)
-2. Helper functions for safe field access with fallbacks
-3. Standardized loading states with Skeleton components
-4. Comprehensive error handling with user-friendly alerts
-5. Safe data transformation with null/undefined checks
+3. **Mileage Management**:
+   - Implement the ability to update current mileage for vehicles
+   - Add mileage history tracking and visualization
 
-## Launch Instructions
+## Known Issues
 
-### Backend Server
-```bash
-cd ecar-backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-python manage.py migrate
-python manage.py runserver
-```
-Backend available at: http://localhost:8000/
+1. **API Endpoint Pattern Inconsistencies**:
+   - Some endpoints follow `/api/v1/entity/` while others use `/api/v1/entity-name/`
+   - We need to standardize this pattern across the application
 
-### Frontend Server
-```bash
-cd ecar-frontend
-npm install
-npm run dev
-```
-Frontend available at: http://localhost:5173/
+2. **Password Management**:
+   - Need to verify that the password reset endpoint exists on backend
+   - May need to adjust the implementation based on actual backend behavior
 
-## Next Steps
+3. **Data Validation**:
+   - Phone number validation needs to be more consistent
+   - Date formatting needs standardization across all components
 
-### Immediate Priorities
-1. Implement the missing `/api/v1/services/` endpoint in the backend
-2. Complete the Services page integration once API is available
-3. Update Dashboard with real statistics from the API
+## Dependencies
+- React 18.2.0
+- Material UI 5.14.0
+- Axios 1.4.0
+- React Hook Form 7.45.1
+- Django 4.2.2
+- Django REST Framework 3.14.0
 
-### Short-term Goals
-1. Add form validation with zod schemas
-2. Implement pagination for all data tables
-3. Add sorting and filtering capabilities
-4. Create detail views for individual records
-5. Enhance error handling for form submissions
+## Testing Status
+- Unit tests: Partial coverage
+- Integration tests: Limited
+- End-to-end tests: Not implemented yet
 
-### Long-term Goals
-1. Add comprehensive test coverage
-2. Implement user roles and permissions
-3. Create a proper deployment pipeline
-4. Add a mobile-responsive design
-5. Implement data export features
+## Next Planned Update
+- Implement backend API endpoints for user management
+- Complete service history in vehicle details
+- Add comprehensive form validation
 
-## Project Structure
+## État Actuel du Développement (16 Août 2024)
 
-### Frontend
-- **Pages**: Dashboard, Vehicles, Services, Customers, Factures, Suivi Kilométrique, Settings
-- **Components**: Layout, Sidebar, Header, DataTable, StatCard, SearchInput, Forms
-- **Utils**: API client, date formatters, field access helpers, validators
+### Fonctionnalités Implémentées
+
+#### Pages et Vues:
+- **Login/Authentication**: Fonctionnel avec système de jetons JWT
+- **Dashboard**: Implémenté avec statistiques de base
+- **Gestion des Clients (CustomersPage)**: Création, affichage et édition des clients
+- **Gestion des Véhicules (VehiclesPage)**: Affichage et liaison avec les clients
+- **Gestion des Services (ServicesPage)**:
+  - Liste des interventions avec filtrage par statut
+  - Ajout de nouvelles interventions
+  - Affichage des statistiques par statut (Planifiés, En Cours, Terminés)
+  - **NOUVEAU**: Affichage détaillé d'une intervention via bouton "Détails"
+  - Vue calendrier (structure en place, contenu à implémenter)
+
+### Corrections Récentes
+- Correction de l'affichage des statuts de service pour gérer différents formats
+- Amélioration de la gestion des erreurs API
+- Correction du formulaire d'ajout de clients
+- Ajout de la fonctionnalité du bouton "Détails" dans la liste des interventions
+- Correction de l'affichage des compteurs de véhicules par client
+
+### Problèmes En Cours
+- Dépendance manquante pour les composants tooltip (@radix-ui/react-tooltip)
+- Quelques problèmes de contraste dans certains composants UI
+- Date-fns version incompatible avec certains composants
+
+### Tâches à Venir
+- Implémenter la vue calendrier des services
+- Ajouter la fonctionnalité de modification des interventions existantes
+- Compléter l'intégration des tooltips pour les en-têtes de colonne
+- Corriger les problèmes de dépendances
+- Améliorer l'affichage mobile (responsive design)
 
 ### Backend
-- **Apps**: Authentication, Vehicles, Services, Invoices, MileageRecords
-- **API**: REST endpoints with JWT authentication
-- **Models**: User, Vehicle, Service, Invoice, MileageRecord
+- API fonctionnelle pour les clients, véhicules et services
+- Système d'authentification avec JWT
+- Modèles pour les utilisateurs, véhicules et interventions en place
 
-## Technical Debt
-1. Missing backend endpoints
-2. Limited form validation
-3. No pagination for large datasets
-4. Limited error handling for form submissions
-5. Incomplete test coverage
+### Progrès Global
+- **Frontend**: ~75% terminé
+- **Backend**: ~85% terminé
+- **Documentation**: ~70% terminée

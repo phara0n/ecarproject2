@@ -1,6 +1,6 @@
 import React from 'react';
-import { BrowserRouter as Router, Route, Routes, Outlet, Navigate } from 'react-router-dom';
-import { useAuth } from '@/context/AuthProvider'; // Import useAuth
+import { Route, Routes, Outlet, Navigate } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext'; // Import useAuth
 import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from "@/components/ui/sonner"; // Import Sonner Toaster
 
@@ -16,38 +16,39 @@ import SuiviKilometrique from '@/pages/SuiviKilometrique';
 import SettingsPage from '@/pages/SettingsPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 
+// Loader component (simple version)
+const FullPageLoader = () => (
+  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+    Chargement de l'application...
+  </div>
+);
+
 // Layout wrapper for protected routes
 const ProtectedLayout = () => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated } = useAuth(); // isLoading n'est plus nécessaire ici
 
-  if (isLoading) {
-    // Show loading indicator while checking auth status
-    // You can replace this with a proper spinner component later
-    return <div>Vérification de l'authentification...</div>;
-  }
+  // Le chargement initial est géré globalement dans App
+  // if (isLoading) { return <FullPageLoader />; }
 
   if (!isAuthenticated) {
-    // Redirect to login page if not authenticated
     console.log("ProtectedLayout: Not authenticated, redirecting to login.");
     return <Navigate to="/login" replace />;
   }
 
-  // If authenticated, render the layout and the nested route
   console.log("ProtectedLayout: Authenticated, rendering layout.");
   return (
     <AppLayout>
-      <Outlet /> {/* Renders the nested child route (e.g., DashboardPage) */}
+      <Outlet />
     </AppLayout>
   );
 };
 
 // Component to handle redirection if user is already logged in and tries to access /login
 const PublicRoute = ({ children }: { children: React.ReactNode }) => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated } = useAuth(); // isLoading n'est plus nécessaire ici
 
-  if (isLoading) {
-    return <div>Vérification de l'authentification...</div>;
-  }
+  // Le chargement initial est géré globalement dans App
+  // if (isLoading) { return <FullPageLoader />; }
 
   if (isAuthenticated) {
     console.log("PublicRoute: Authenticated, redirecting from login to dashboard.");
@@ -57,33 +58,40 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
   return children;
 };
 
+// --- Main App Component ---
+function AppRoutes() {
+  // Ce composant ne rend les routes qu'une fois le chargement initial terminé
+  return (
+    <Routes>
+      <Route
+        path="/login"
+        element={
+          <PublicRoute>
+            <LoginPage />
+          </PublicRoute>
+        }
+      />
+      <Route element={<ProtectedLayout />}>
+        <Route path="/" element={<DashboardPage />} />
+        <Route path="/vehicles" element={<VehiclesPage />} />
+        <Route path="/services" element={<ServicesPage />} />
+        <Route path="/customers" element={<CustomersPage />} />
+        <Route path="/factures" element={<FacturesPage />} />
+        <Route path="/mileage" element={<SuiviKilometrique />} />
+        <Route path="/settings" element={<SettingsPage />} />
+      </Route>
+      <Route path="*" element={<NotFoundPage />} />
+    </Routes>
+  );
+}
+
 function App() {
+  const { isLoading } = useAuth(); // Obtenir l'état de chargement initial
+
   return (
     <ThemeProvider defaultTheme="system" storageKey="ecar-admin-theme">
-      <Router>
-        <Routes>
-          <Route 
-            path="/login" 
-            element={
-              <PublicRoute>
-                <LoginPage />
-              </PublicRoute>
-            } 
-          />
-          <Route element={<ProtectedLayout />}>
-            {/* Routes requiring the AppLayout go here */}
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/vehicles" element={<VehiclesPage />} />
-            <Route path="/services" element={<ServicesPage />} />
-            <Route path="/customers" element={<CustomersPage />} />
-            <Route path="/factures" element={<FacturesPage />} />
-            <Route path="/mileage" element={<SuiviKilometrique />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Route>
-          <Route path="*" element={<NotFoundPage />} /> {/* Catch-all route */}
-        </Routes>
-      </Router>
-      <Toaster /> {/* Add the Toaster component here */}
+      {isLoading ? <FullPageLoader /> : <AppRoutes />} {/* Afficher Loader ou Routes */}
+      <Toaster />
     </ThemeProvider>
   );
 }

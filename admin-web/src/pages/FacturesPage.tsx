@@ -1,11 +1,25 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { PlusIcon, RefreshCw, AlertCircle, FileIcon, DownloadIcon } from 'lucide-react';
+import { PlusIcon, RefreshCw, AlertCircle, FileIcon, DownloadIcon, XIcon } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { useAuth } from '@/context/AuthProvider';
+import { useAuth } from '@/context/AuthContext';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogDescription, 
+  DialogHeader, 
+  DialogTitle,
+  DialogFooter, 
+  DialogClose 
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
+import { formatDate } from '@/utils/formatters'; // Assuming this utility exists
 
 // Define the Invoice interface based on the actual API response
 interface Invoice {
@@ -19,18 +33,59 @@ interface Invoice {
   service_event_id?: number;
   fichier?: string;
   file?: string;
+  pdf_file?: string;
+  pdf_file_url?: string;
   montant?: number;
   amount?: number;
+  final_amount?: number;
   date_creation?: string;
   created_at?: string;
+  uploaded_at?: string;
+  invoice_date?: string;
   description?: string;
+  vehicle_info?: {
+    registration_number: string;
+    make: string;
+    model: string;
+  };
+}
+
+// Interface for the vehicle object
+interface Vehicle {
+  id: number;
+  registration_number: string;
+  make: string;
+  model: string;
+}
+
+// Interface for the service event object
+interface ServiceEvent {
+  id: number;
+  event_date: string;
+  service_type_info: {
+    name: string;
+  };
 }
 
 const FacturesPage = () => {
-  const { token } = useAuth();
+  const { authAxios } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [isAddInvoiceOpen, setIsAddInvoiceOpen] = useState(false);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [services, setServices] = useState<ServiceEvent[]>([]);
+  const [isVehiclesLoading, setIsVehiclesLoading] = useState(false);
+  const [isServicesLoading, setIsServicesLoading] = useState(false);
+  const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
+  const [selectedService, setSelectedService] = useState<string | null>(null);
+  const [amount, setAmount] = useState<string>('');
+  const [invoiceDate, setInvoiceDate] = useState<string>(
+    new Date().toISOString().split('T')[0]
+  );
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Function to fetch invoices from the API
   const fetchInvoices = async () => {
@@ -38,15 +93,12 @@ const FacturesPage = () => {
     setError(null);
     
     try {
-      const response = await fetch('/api/v1/invoices/', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await authAxios.get('api/v1/invoices/');
 
-      if (!response.ok) {
-        throw new Error(`Erreur lors de la récupération des factures: ${response.statusText}`);
+      // Check if we got JSON back
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Réponse du serveur non valide (attendu: JSON)');
       }
 
       const responseData = await response.json();
@@ -73,10 +125,170 @@ const FacturesPage = () => {
     }
   };
 
+  // Function to fetch vehicles
+  const fetchVehicles = async () => {
+    setIsVehiclesLoading(true);
+    try {
+      const response = await authAxios.get('api/v1/vehicles/');
+      const data = await response.json();
+      const vehiclesData = data.data || data;
+      if (!Array.isArray(vehiclesData)) {
+        throw new Error('Format de réponse API inattendu pour les véhicules');
+      }
+      setVehicles(vehiclesData);
+    } catch (err) {
+      console.error('Error fetching vehicles:', err);
+      setSubmitError(err instanceof Error ? err.message : 'Impossible de récupérer les véhicules');
+    } finally {
+      setIsVehiclesLoading(false);
+    }
+  };
+
+  // Function to fetch service events for a specific vehicle
+  const fetchServiceEvents = async (vehicleId: string) => {
+    if (!vehicleId) return;
+    setIsServicesLoading(true);
+    setServices([]);
+    
+    try {
+      // Avec Ky, utilisez searchParams pour les paramètres de requête
+      const response = await authAxios.get('api/v1/service-events/', {
+        searchParams: { vehicle_id: vehicleId }
+      });
+      
+      const data = await response.json();
+      const servicesData = data.data || data;
+      if (!Array.isArray(servicesData)) {
+        throw new Error('Format de réponse API inattendu pour les services');
+      }
+      setServices(servicesData);
+    } catch (err) {
+      console.error('Error fetching services:', err);
+      setSubmitError(err instanceof Error ? err.message : 'Impossible de récupérer les services');
+    } finally {
+      setIsServicesLoading(false);
+    }
+  };
+
+  // Function to download an invoice
+  const downloadInvoice = async (invoice: Invoice) => {
+    try {
+      // Get file URL - prioritize pdf_file_url, then pdf_file, then file, then fichier
+      const fileUrl = invoice.pdf_file_url || invoice.pdf_file || invoice.file || invoice.fichier;
+      
+      if (!fileUrl) {
+        throw new Error('Aucun fichier disponible pour cette facture');
+      }
+      
+      // Determine if this is a full URL or just a path
+      const url = fileUrl.startsWith('http') ? fileUrl : `api/v1/media/${fileUrl}`;
+      
+      console.log('Attempting to download file from:', url);
+      
+      // Use Ky to get the file as a blob
+      const response = await authAxios.get(url, {
+        responseType: 'blob',
+      });
+      
+      // Create a blob from the response
+      const blob = await response.blob();
+      
+      // Create a link element and trigger download
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      
+      // Try to get a sensible filename
+      const vehicleInfo = invoice.vehicle_info?.registration_number || 
+                         getInvoiceField(invoice, ['vehicule_immatriculation', 'vehicle_license_plate']);
+      const date = getInvoiceField(invoice, ['invoice_date', 'date_creation', 'created_at', 'uploaded_at']);
+      const filename = `facture_${vehicleInfo}_${date}.pdf`;
+      
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      console.error('Error downloading invoice:', err);
+      alert("Erreur lors du téléchargement de la facture. Veuillez réessayer.");
+    }
+  };
+
+  // Function to handle file upload
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!selectedVehicle || !amount || !fileInputRef.current?.files?.[0]) {
+      setSubmitError('Veuillez remplir tous les champs obligatoires');
+      return;
+    }
+    
+    setIsSubmitting(true);
+    setSubmitError(null);
+    
+    try {
+      // Create form data for multipart/form-data request (required for file upload)
+      const formData = new FormData();
+      formData.append('vehicle_id', selectedVehicle);
+      formData.append('final_amount', amount);
+      formData.append('invoice_date', invoiceDate);
+      formData.append('pdf_file', fileInputRef.current.files[0]);
+      
+      if (selectedService) {
+        formData.append('service_event_id', selectedService);
+      }
+      
+      console.log('Uploading file...', fileInputRef.current.files[0].name);
+      
+      // Send POST request to create invoice - use Ky with FormData
+      // Avec Ky, on passe directement le FormData comme body, sans l'encapsuler
+      const response = await authAxios.post('api/v1/invoices/', formData);
+      
+      // Check response status
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Échec de la création de la facture');
+      }
+      
+      // Close modal and refresh list
+      setIsAddInvoiceOpen(false);
+      fetchInvoices();
+      
+      // Reset form
+      setSelectedVehicle(null);
+      setSelectedService(null);
+      setAmount('');
+      setInvoiceDate(new Date().toISOString().split('T')[0]);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } catch (err) {
+      console.error('Error creating invoice:', err);
+      setSubmitError(err instanceof Error ? err.message : 'Échec de la création de la facture');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // Fetch invoices on component mount
   useEffect(() => {
     fetchInvoices();
-  }, [token]);
+  }, []);
+
+  // Fetch vehicles when opening add invoice modal
+  useEffect(() => {
+    if (isAddInvoiceOpen) {
+      fetchVehicles();
+    }
+  }, [isAddInvoiceOpen]);
+
+  // Fetch services when a vehicle is selected
+  useEffect(() => {
+    if (selectedVehicle) {
+      fetchServiceEvents(selectedVehicle);
+    }
+  }, [selectedVehicle]);
 
   // Helper to get the best available field with fallbacks
   const getInvoiceField = (invoice: Invoice, fields: string[], defaultValue: string = '-') => {
@@ -103,7 +315,7 @@ const FacturesPage = () => {
     
     // Calculate total amount
     const totalAmount = invoices.reduce((sum, invoice) => {
-      const amount = Number(getInvoiceField(invoice, ['montant', 'amount'], '0'));
+      const amount = Number(getInvoiceField(invoice, ['final_amount', 'montant', 'amount'], '0'));
       return sum + amount;
     }, 0);
     
@@ -132,7 +344,7 @@ const FacturesPage = () => {
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Actualiser
           </Button>
-          <Button>
+          <Button onClick={() => setIsAddInvoiceOpen(true)}>
             <PlusIcon className="w-4 h-4 mr-2" />
             Nouvelle Facture
           </Button>
@@ -235,36 +447,42 @@ const FacturesPage = () => {
                     <TableRow key={invoice.id}>
                       <TableCell>{invoice.id}</TableCell>
                       <TableCell>
-                        {getInvoiceField(invoice, ['vehicule_immatriculation', 'vehicle_license_plate'])}
+                        {invoice.vehicle_info?.registration_number || 
+                         getInvoiceField(invoice, ['vehicule_immatriculation', 'vehicle_license_plate'])}
                       </TableCell>
                       <TableCell>
                         {getInvoiceField(invoice, ['evenement_service_id', 'service_event_id'])}
                       </TableCell>
                       <TableCell>
-                        {getInvoiceField(invoice, ['date_creation', 'created_at'])}
+                        {formatDate(getInvoiceField(invoice, ['invoice_date', 'date_creation', 'created_at', 'uploaded_at']))}
                       </TableCell>
                       <TableCell>
-                        {formatCurrency(getInvoiceField(invoice, ['montant', 'amount']))}
+                        {formatCurrency(getInvoiceField(invoice, ['final_amount', 'montant', 'amount']))}
                       </TableCell>
                       <TableCell>
-                        {getInvoiceField(invoice, ['fichier', 'file']) !== '-' ? (
-                          <FileIcon className="h-5 w-5 text-primary" />
+                        {getInvoiceField(invoice, ['pdf_file', 'fichier', 'file']) !== '-' ? (
+                          <div className="flex items-center">
+                            <FileIcon className="h-4 w-4 mr-1" />
+                            PDF
+                          </div>
                         ) : (
                           '-'
                         )}
                       </TableCell>
                       <TableCell>
-                        <div className="flex space-x-2">
-                          <Button variant="outline" size="sm">
-                            <DownloadIcon className="h-4 w-4" />
-                          </Button>
-                          <Button variant="outline" size="sm">Détails</Button>
-                        </div>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => downloadInvoice(invoice)}
+                          disabled={getInvoiceField(invoice, ['pdf_file', 'fichier', 'file']) === '-'}
+                        >
+                          <DownloadIcon className="h-4 w-4" />
+                          <span className="sr-only">Télécharger</span>
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))
                 ) : (
-                  // No invoices
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
                       Aucune facture trouvée
@@ -276,6 +494,162 @@ const FacturesPage = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Add Invoice Dialog */}
+      <Dialog open={isAddInvoiceOpen} onOpenChange={setIsAddInvoiceOpen}>
+        <DialogContent className="sm:max-w-[525px]">
+          <DialogHeader>
+            <DialogTitle>Ajouter une Nouvelle Facture</DialogTitle>
+            <DialogDescription>
+              Ajoutez une nouvelle facture PDF pour un véhicule.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {submitError && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Erreur</AlertTitle>
+                <AlertDescription>{submitError}</AlertDescription>
+              </Alert>
+            )}
+            
+            <div className="grid gap-4 py-4">
+              {/* Vehicle Selection */}
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="vehicle" className="text-right">
+                  Véhicule*
+                </Label>
+                <div className="col-span-3">
+                  <Select
+                    value={selectedVehicle || ''}
+                    onValueChange={setSelectedVehicle}
+                    disabled={isVehiclesLoading}
+                  >
+                    <SelectTrigger id="vehicle">
+                      <SelectValue placeholder="Sélectionner un véhicule" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {isVehiclesLoading ? (
+                        <SelectItem value="loading" disabled>
+                          Chargement...
+                        </SelectItem>
+                      ) : vehicles.length > 0 ? (
+                        vehicles.map((vehicle) => (
+                          <SelectItem key={vehicle.id} value={vehicle.id.toString()}>
+                            {vehicle.registration_number} - {vehicle.make} {vehicle.model}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="empty" disabled>
+                          Aucun véhicule disponible
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              {/* Service Selection (Optional) */}
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="service" className="text-right">
+                  Service
+                </Label>
+                <div className="col-span-3">
+                  <Select
+                    value={selectedService || ''}
+                    onValueChange={setSelectedService}
+                    disabled={isServicesLoading || !selectedVehicle}
+                  >
+                    <SelectTrigger id="service">
+                      <SelectValue placeholder="Sélectionner un service (optionnel)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {isServicesLoading ? (
+                        <SelectItem value="loading" disabled>
+                          Chargement...
+                        </SelectItem>
+                      ) : services.length > 0 ? (
+                        services.map((service) => (
+                          <SelectItem key={service.id} value={service.id.toString()}>
+                            {service.service_type_info.name} ({formatDate(service.event_date)})
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="empty" disabled>
+                          {selectedVehicle ? "Aucun service pour ce véhicule" : "Sélectionnez d'abord un véhicule"}
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              {/* Amount */}
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="amount" className="text-right">
+                  Montant (DT)*
+                </Label>
+                <div className="col-span-3">
+                  <Input
+                    id="amount"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                  />
+                </div>
+              </div>
+              
+              {/* Invoice Date */}
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="date" className="text-right">
+                  Date*
+                </Label>
+                <div className="col-span-3">
+                  <Input
+                    id="date"
+                    type="date"
+                    value={invoiceDate}
+                    onChange={(e) => setInvoiceDate(e.target.value)}
+                  />
+                </div>
+              </div>
+              
+              {/* File Upload */}
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="file" className="text-right">
+                  Fichier PDF*
+                </Label>
+                <div className="col-span-3">
+                  <Input
+                    id="file"
+                    type="file"
+                    accept=".pdf"
+                    ref={fileInputRef}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <Separator />
+            
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="outline">
+                  Annuler
+                </Button>
+              </DialogClose>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Envoi en cours..." : "Ajouter la facture"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

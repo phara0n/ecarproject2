@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { PlusIcon, FilterIcon, RefreshCw, AlertCircle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { useAuth } from '@/context/AuthProvider';
+import { useAuth } from '@/context/AuthContext';
 import AddVehicleModal from '@/components/vehicles/AddVehicleModal';
 import { VehicleDetailsModal } from '@/components/vehicles/VehicleDetailsModal';
 
@@ -30,11 +30,12 @@ interface Vehicle {
   license_plate?: string; 
   brand?: string; 
   mileage?: number;
-  avg_daily_km?: number; 
+  avg_daily_km?: number;
+  owner_username?: string;
 }
 
 const VehiclesPage = () => {
-  const { token } = useAuth();
+  const { authAxios } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -48,17 +49,9 @@ const VehiclesPage = () => {
     setError(null);
     
     try {
-      const response = await fetch('/api/v1/vehicles/', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Erreur lors de la récupération des véhicules: ${response.statusText}`);
-      }
-
+      // Call get() without chaining .json() - we'll await the response first
+      const response = await authAxios.get('api/v1/vehicles/');
+      // Then parse the JSON response
       const responseData = await response.json();
       console.log('API response:', responseData);
 
@@ -77,7 +70,15 @@ const VehiclesPage = () => {
       setVehicles(vehiclesData);
     } catch (err) {
       console.error('Error fetching vehicles:', err);
-      setError(err instanceof Error ? err.message : 'Une erreur est survenue');
+      // Ky errors might need different handling
+      let errorMessage = 'Une erreur est survenue';
+      // Check if it's a Ky HTTPError
+      if (err.response && err.response.status) {
+        errorMessage = `Erreur ${err.response.status}: ${err.response.statusText || 'Erreur lors de la récupération des véhicules'}`;
+      } else if (err instanceof Error) {
+        errorMessage = err.message;
+      }
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -86,7 +87,7 @@ const VehiclesPage = () => {
   // Fetch vehicles on component mount
   useEffect(() => {
     fetchVehicles();
-  }, [token]);
+  }, []);
 
   // Helper to get the best available field with fallbacks
   const getVehicleField = (vehicle: Vehicle, fields: string[], defaultValue: string = '-') => {

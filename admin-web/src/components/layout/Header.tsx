@@ -1,5 +1,5 @@
 import * as React from "react"; // Import React
-import { useAuth } from "@/context/AuthProvider"; // Import useAuth
+import { useAuth } from "@/context/AuthContext"; // CORRECTED IMPORT PATH
 import { ModeToggle } from "@/components/ui/mode-toggle"; // Import our new ModeToggle
 import {
   DropdownMenu,

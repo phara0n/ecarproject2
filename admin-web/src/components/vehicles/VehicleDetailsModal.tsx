@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose, DialogFooter } from '@/components/ui/dialog';
-import { useAuth } from '@/context/AuthProvider';
+import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { AlertCircle, X, RefreshCcw, UserRound, Phone, Mail, Edit, Save } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -297,7 +297,7 @@ export const VehicleDetailsModal: React.FC<VehicleDetailsModalProps> = ({
       // Extract owner_id from the customer details if available
       const ownerId = customerDetails?.id || vehicle.owner_id;
       
-      const response = await authAxios.put(`/api/v1/vehicles/${vehicle.id}/`, {
+      const response = await authAxios.put(`api/v1/vehicles/${vehicle.id}/`, {
         registration_number: editedVehicle.registration_number,
         make: editedVehicle.make,
         model: editedVehicle.model,

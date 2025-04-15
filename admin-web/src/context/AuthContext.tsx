@@ -20,12 +20,13 @@ interface AuthContextType {
   login: (credentials: { username: string; password: string }) => Promise<void>; // Async for API call
   logout: () => void;
   checkAuthStatus: () => Promise<void>; // Async for potential API call
-  refreshToken: () => Promise<string | undefined>; // Async function to refresh the expired token, returns the new token
+  refreshToken: () => Promise<string | null>; // Async function to refresh the expired token, returns the new token
   authAxios: {
-    get: (url: string, config?: any) => Promise<any>;
-    post: (url: string, data?: any, config?: any) => Promise<any>;
-    put: (url: string, data?: any, config?: any) => Promise<any>;
-    delete: (url: string, config?: any) => Promise<any>;
+    get: (url: string, options?: any) => Promise<any>;
+    post: (url: string, options?: any) => Promise<any>;
+    put: (url: string, options?: any) => Promise<any>;
+    delete: (url: string, options?: any) => Promise<any>;
+    patch: (url: string, options?: any) => Promise<any>;
   };
 }
 

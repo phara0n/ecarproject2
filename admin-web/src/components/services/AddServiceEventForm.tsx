@@ -38,7 +38,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useAuth } from "@/context/AuthProvider";
+import { useAuth } from "@/context/AuthContext";
 
 // Form schema validation
 const serviceEventSchema = z.object({
@@ -147,7 +147,7 @@ export function AddServiceEventForm({
       
       try {
         console.log("[AddServiceEventForm] Fetching service types...");
-        const response = await authAxios.get("/api/v1/service-types/");
+        const response = await authAxios.get("api/v1/service-types/");
         console.log("[AddServiceEventForm] Service types API response:", response.data);
         console.log("[AddServiceEventForm] Response type:", typeof response.data, Array.isArray(response.data));
         
@@ -244,6 +244,7 @@ export function AddServiceEventForm({
         title: data.title,
         description: data.description || "",
         date_scheduled: safeFormatDate(data.date_scheduled, "yyyy-MM-dd", false),
+        event_date: safeFormatDate(data.date_scheduled, "yyyy-MM-dd", false),
         status: data.status,
         vehicle_id: parseInt(data.vehicle),
         service_type_id: parseInt(data.service_type),
@@ -253,15 +254,18 @@ export function AddServiceEventForm({
       
       // If date formatting failed, use ISO date
       if (!submissionData.date_scheduled) {
-        submissionData.date_scheduled = new Date(data.date_scheduled).toISOString().split('T')[0];
+        const isoDate = new Date(data.date_scheduled).toISOString().split('T')[0];
+        submissionData.date_scheduled = isoDate;
+        submissionData.event_date = isoDate;
       }
       
       // Debug vehicle and service_type values
       console.log(`[AddServiceEventForm] Vehicle ID: ${submissionData.vehicle_id}, from: ${tempSelectedVehicle}`);
       console.log(`[AddServiceEventForm] Service Type ID: ${submissionData.service_type_id}, from: ${data.service_type}`);
+      console.log(`[AddServiceEventForm] Event Date: ${submissionData.event_date}, Date Scheduled: ${submissionData.date_scheduled}`);
       
       try {
-        const response = await authAxios.post("/api/v1/service-events/", submissionData);
+        const response = await authAxios.post("api/v1/service-events/", submissionData);
         console.log("[AddServiceEventForm] API response:", response.data);
         
         toast.success("Événement de service ajouté", {
@@ -278,24 +282,42 @@ export function AddServiceEventForm({
         // Display more specific error message if available
         if (error.response && error.response.data) {
           const errorData = error.response.data;
-          console.log("[AddServiceEventForm] Error response data:", errorData);
+          console.debug("DEBUG: Original error data:", errorData);
           
           // Try to extract field-specific errors
           if (typeof errorData === 'object') {
-            const fieldErrors = Object.entries(errorData)
-              .filter(([key, value]) => key !== 'detail' && key !== 'code')
-              .map(([field, errors]) => `${field}: ${Array.isArray(errors) ? errors.join(', ') : errors}`)
-              .join('; ');
+            let fieldErrors = "";
+            
+            // Handle different error response formats
+            if (errorData.error && typeof errorData.error === 'object') {
+              // Format: { metadata: {...}, data: null, error: {...} }
+              console.debug("Error format: metadata/data/error structure");
+              fieldErrors = Object.entries(errorData.error)
+                .filter(([key, value]) => key !== 'detail' && key !== 'code')
+                .map(([field, errors]) => `${field}: ${Array.isArray(errors) ? errors.join(', ') : errors}`)
+                .join('; ');
+            } else {
+              // Standard format: { field1: [errors], field2: [errors] }
+              console.debug("Error format: standard field->errors structure");
+              fieldErrors = Object.entries(errorData)
+                .filter(([key, value]) => key !== 'detail' && key !== 'code')
+                .map(([field, errors]) => `${field}: ${Array.isArray(errors) ? errors.join(', ') : errors}`)
+                .join('; ');
+            }
               
             if (fieldErrors) {
               errorMsg += ` Erreurs: ${fieldErrors}`;
             } else if (errorData.detail) {
               errorMsg += ` ${errorData.detail}`;
+            } else if (errorData.error && errorData.error.detail) {
+              errorMsg += ` ${errorData.error.detail}`;
             } else {
-              errorMsg += " " + JSON.stringify(errorData);
+              errorMsg += ` Erreur: ${JSON.stringify(errorData)}`;
             }
+          } else if (typeof errorData === 'string') {
+            errorMsg += ` ${errorData}`;
           } else {
-            errorMsg += " " + JSON.stringify(errorData);
+            errorMsg += ` Erreur: ${JSON.stringify(errorData)}`;
           }
         }
         

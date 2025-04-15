@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '@/context/AuthProvider';
+import { useAuth } from '@/context/AuthContext';
 import { AddServiceEventForm } from '@/components/services/AddServiceEventForm';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -87,9 +87,12 @@ const ServicesPage: React.FC = () => {
     setIsDataLoading(true);
     setError(null);
     try {
-      const response = await authAxios.get('/api/v1/service-events/');
+      // First get the response, then parse the JSON
+      const response = await authAxios.get('api/v1/service-events/');
+      const responseData = await response.json();
+      
       // Adjust based on actual API response structure
-      const data = response.data?.results || response.data?.data || response.data || [];
+      const data = responseData?.results || responseData?.data || responseData || [];
       console.log("[ServicesPage] Service events data received:", data);
       
       // Log status values to debug
@@ -114,9 +117,23 @@ const ServicesPage: React.FC = () => {
         mileage_at_service: event.mileage_at_service,
         notes: event.notes
       })));
-    } catch (err) {
+    } catch (err: any) {
       console.error("[ServicesPage] Error fetching service events:", err);
-      setError("Impossible de charger les événements de service: " + (err.response?.data?.detail || err.message));
+      let errorMessage = "Impossible de charger les événements de service";
+      
+      // Handle Ky errors
+      if (err.response) {
+        try {
+          const errorData = await err.response.json();
+          errorMessage += ": " + (errorData?.detail || errorData?.message || JSON.stringify(errorData));
+        } catch (parseError) {
+          errorMessage += `: Erreur ${err.response.status}`;
+        }
+      } else if (err instanceof Error) {
+        errorMessage += ": " + err.message;
+      }
+      
+      setError(errorMessage);
       setServiceEvents([]);
     } finally {
       setIsDataLoading(false);
@@ -127,9 +144,14 @@ const ServicesPage: React.FC = () => {
     if (!authAxios) return;
     console.log("[ServicesPage] Fetching vehicles...");
     try {
-      const response = await authAxios.get('/api/v1/vehicles/');
-      const data = response.data?.results || response.data?.data || response.data || [];
+      // First get the response, then parse the JSON
+      const response = await authAxios.get('api/v1/vehicles/');
+      const responseData = await response.json();
+      
+      // Adjust based on actual API response structure
+      const data = responseData?.results || responseData?.data || responseData || [];
       console.log("[ServicesPage] Vehicles data received:", data);
+      
       // Map vehicle data more accurately
       setVehicles(data.map((vehicle: any) => ({
         id: vehicle.id,
@@ -137,8 +159,14 @@ const ServicesPage: React.FC = () => {
         make: vehicle.make,
         model: vehicle.model
       })));
-    } catch (err) {
+    } catch (err: any) {
       console.error("[ServicesPage] Error fetching vehicles:", err);
+      // We don't show error for vehicles in the UI, but log properly
+      if (err.response) {
+        console.error(`[ServicesPage] Vehicle API Error (${err.response.status})`);
+      } else if (err instanceof Error) {
+        console.error(`[ServicesPage] Vehicle Fetch Error: ${err.message}`);
+      }
       setVehicles([]);
     }
   };

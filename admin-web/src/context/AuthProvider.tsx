@@ -1,6 +1,7 @@
-import React, { useState, useEffect, ReactNode, useMemo } from 'react';
-import AuthContext, { AuthContextType, User, useAuth } from './AuthContext'; // Import context definition
-import axios, { AxiosInstance } from 'axios';
+import React, { useState, useEffect, ReactNode, useMemo, useCallback, useRef } from 'react';
+import AuthContext, { AuthContextType, User } from './AuthContext';
+import ky from 'ky';
+import { useNavigate } from 'react-router-dom';
 
 // Define props for the provider component
 interface AuthProviderProps {
@@ -11,398 +12,349 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [refreshTokenValue, setRefreshTokenValue] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true); // Start loading to check auth status
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [refreshPromise, setRefreshPromise] = useState<Promise<string | undefined> | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // isLoading est UNIQUEMENT pour l'état initial, jusqu'à la fin de la première vérification
+  const [isLoading, setIsLoading] = useState(true);
+  const [authAttempts, setAuthAttempts] = useState(0);
+  const MAX_AUTH_RETRIES = 3;
+  // Flag pour savoir si la vérification initiale est en cours
+  const [isInitialCheckRunning, setIsInitialCheckRunning] = useState(false);
+  
+  // Use refs to stabilize function identities
+  const tokenRef = useRef<string | null>(null);
+  const initialLoadingRef = useRef<boolean>(true);
+  const kyInstanceRef = useRef<typeof ky | null>(null);
 
-  // Create axios instance with interceptors for token handling
-  const authAxios: AxiosInstance = useMemo(() => {
-    console.log("Creating new authAxios instance (should happen once)"); // Add log
-    const instance = axios.create({
-      baseURL: '/',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    // Request interceptor to add token
-    instance.interceptors.request.use(
-      (config) => {
-        // Read directly from localStorage
-        const currentToken = localStorage.getItem('authToken');
-        
-        console.log("[Request Interceptor] Checking token:", currentToken ? currentToken.substring(0, 10) + '...' : 'None');
-        if (currentToken) {
-          config.headers['Authorization'] = `Bearer ${currentToken}`;
-          console.log("[Request Interceptor] Token added to headers.");
-        } else {
-          console.warn("[Request Interceptor] No token found in localStorage for request to:", config.url);
-        }
-        return config;
-      },
-      (error) => Promise.reject(error)
-    );
-
-    // Response interceptor to handle token refresh
-    instance.interceptors.response.use(
-      (response) => response,
-      async (error) => {
-        const originalRequest = error.config;
-
-        // Read latest state values inside the interceptor
-        const currentRefreshTokenValue = refreshTokenValue;
-        const currentIsRefreshing = isRefreshing;
-        const currentRefreshPromise = refreshPromise;
-
-        // If error is 401 and not a retry and we have a refresh token
-        if (error.response?.status === 401 && !originalRequest._retry && currentRefreshTokenValue) {
-          originalRequest._retry = true;
-          console.log("Interceptor: Caught 401. Attempting token refresh...");
-
-          try {
-            // Check if another request is already refreshing the token
-            if (currentIsRefreshing && currentRefreshPromise) {
-              console.log("Interceptor: Refresh already in progress, waiting...");
-              const newToken = await currentRefreshPromise; // Wait for the existing refresh to complete
-              if (newToken) {
-                console.log("Interceptor: Using token from existing refresh for retry.");
-                originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
-                return instance(originalRequest); // Retry with the obtained token
-              }
-              throw new Error('Existing token refresh failed');
-            }
-
-            // Initiate a new token refresh
-            // Use the refreshToken function directly (it uses state internally)
-            const promise = refreshToken(); 
-            setRefreshPromise(promise); // Store the promise to check if refresh is in progress
-            setIsRefreshing(true); // Set refreshing flag
-            console.log("Interceptor: Started new token refresh.");
-
-            const newToken = await promise;
-
-            // Reset refresh state *after* the promise resolves
-            setIsRefreshing(false);
-            setRefreshPromise(null);
-
-            if (newToken) {
-              console.log("Interceptor: Token refreshed successfully. Updating instance defaults and retrying...");
-              instance.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
-              originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
-              return instance(originalRequest);
-            }
-            throw new Error('Token refresh failed to return a new token');
-          } catch (refreshError) {
-            console.error("Interceptor: Token refresh failed:", refreshError);
-            setIsRefreshing(false);
-            setRefreshPromise(null);
-            logout(); // Logout user if refresh fails
-            return Promise.reject(refreshError);
-          }
-        }
-        return Promise.reject(error);
-      }
-    );
-
-    return instance;
-  // Empty dependency array ensures instance is created only once
-  // Interceptors will use latest state via closures.
-  }, []);
-
-  // Helper function to fetch user data after getting a token
-  const fetchUserData = async (authToken?: string) => { // Make authToken optional for calls using authAxios
-    console.log("Fetching user data...");
-    try {
-      // Use authAxios instance - it automatically includes the latest token via interceptor
-      // If an explicit authToken is provided (e.g., right after login), 
-      // pass it in headers to ensure the *very latest* token is used immediately.
-      const headers: { [key: string]: string } = {
-        'Content-Type': 'application/json',
-      };
-      if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
-      }
-      
-      const response = await authAxios.get('/api/v1/users/me/', { headers });
-
-      // Axios automatically throws for non-2xx status, so no need for response.ok check
-      
-      const responseData = response.data; // Axios wraps the response data in `data`
-      console.log("Raw user data response:", responseData);
-
-      // Try extracting from nested 'data' first, then assume flat structure
-      // Also perform a basic check if it looks like a user object
-      let userData: User | null = null;
-      if (responseData && responseData.data && typeof responseData.data === 'object' && responseData.data.id) {
-        userData = responseData.data;
-        console.log("Extracted user data from nested 'data' field.");
-      } else if (responseData && typeof responseData === 'object' && responseData.id) {
-        userData = responseData as User;
-        console.log("Extracted user data from root response object.");
-      }
-
-      if (!userData) {
-         console.error("User data missing or invalid in API response structure:", responseData);
-         throw new Error("Structure de réponse utilisateur API inattendue.");
-      }
-
-      console.log("User data extracted:", userData);
-      setUser(userData); 
-      
-      // Update token state and local storage if a new token was effectively used/validated
-      const tokenToStore = authToken || localStorage.getItem('authToken');
-      if (tokenToStore) {
-          setToken(tokenToStore); 
-          localStorage.setItem('authToken', tokenToStore);
-      } else {
-          // This case should ideally not happen if fetchUserData is called correctly
-          console.warn("fetchUserData completed but no token was available to store.");
-      }
-
-    } catch (error: any) { // Catch AxiosError
-      console.error("Error fetching or processing user data:", error);
-      
-      // Check if it's an Axios error and get status code if possible
-      let errorMessage = "Erreur lors de la récupération des données utilisateur.";
-      if (axios.isAxiosError(error) && error.response) {
-          console.error("Axios error details:", error.response.data);
-          errorMessage = `Failed to fetch user data: ${error.response.statusText} (${error.response.status})`;
-          // Specific handling for 401/403 could be added here if needed, 
-          // but the interceptor should ideally handle 401s.
-          if (error.response.status === 404) {
-              errorMessage = "Endpoint utilisateur non trouvé (404). Vérifiez la configuration API.";
-          }
-      } else if (error instanceof Error) {
-          errorMessage = error.message;
-      }
-
-      setUser(null);
-      setToken(null); 
-      localStorage.removeItem('authToken'); 
-      // Consider whether to clear refresh token here. Maybe only if error is 401/403?
-      // For now, let's keep it to allow manual re-login without losing refresh capability.
-      // localStorage.removeItem('refreshToken'); 
-      
-      // Throw a new error with a more specific message if possible
-      throw new Error(errorMessage); 
-    }
-  };
-
-  // Function to check auth status on initial load (using API)
-  const checkAuthStatus = async () => {
-    setIsLoading(true);
-    console.log("Checking auth status...");
-    const storedToken = localStorage.getItem('authToken');
-    const storedRefreshToken = localStorage.getItem('refreshToken');
-    
-    if (storedToken) {
-      console.log("Token found in localStorage. Verifying...");
-      try {
-        // TODO: Optionally add a dedicated token verification endpoint (/api/auth/token/verify/)
-        // For now, we assume fetching user data verifies the token implicitly.
-        await fetchUserData(storedToken);
-        setRefreshTokenValue(storedRefreshToken);
-        console.log("Auth status checked: Token valid, user logged in.");
-      } catch (error) {
-        console.log("Token verification failed or user fetch failed.");
-        // If we have a refresh token, try to refresh the access token
-        if (storedRefreshToken) {
-          try {
-            await refreshToken();
-          } catch (refreshError) {
-            // If refresh fails, clear everything
-            setUser(null);
-            setToken(null);
-            setRefreshTokenValue(null);
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('refreshToken');
-          }
-        } else {
-          // Error handling is done within fetchUserData (clears state/token)
-          setUser(null);
-          setToken(null);
-          localStorage.removeItem('authToken');
-        }
-      }
-    } else {
-      console.log("No token found. User is not logged in.");
-      setUser(null);
-      setToken(null);
-      setRefreshTokenValue(null);
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('refreshToken');
-    }
-    setIsLoading(false);
-  };
-
-  // Function to refresh the token
-  const refreshToken = async (): Promise<string | undefined> => {
-    console.log("Attempting to refresh token...");
-    const storedRefreshToken = localStorage.getItem('refreshToken') || refreshTokenValue;
-    
-    if (!storedRefreshToken) {
-      console.error("No refresh token available");
-      // Optionally logout user here if refresh is critical and impossible
-      // logout(); 
-      throw new Error("No refresh token available");
-    }
-    
-    try {
-      // Use standard fetch here, as authAxios interceptors might interfere with refresh logic
-      const response = await fetch('/api/v1/token/refresh/', { 
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ refresh: storedRefreshToken }),
-      });
-
-      if (!response.ok) {
-        // If refresh fails (e.g., 401 Unauthorized), logout the user
-        console.error(`Token refresh failed with status: ${response.status}`);
-        logout(); // Logout on failed refresh
-        throw new Error(`Failed to refresh token: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      const newToken = data.access;
-      
-      // --- Added check for newToken ---
-      if (newToken) {
-        console.log("Token refreshed successfully, new token:", newToken.substring(0, 10) + "...");
-        setToken(newToken);
-        localStorage.setItem('authToken', newToken);
-        // Update the default header for subsequent authAxios requests immediately
-        authAxios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
-      } else {
-        console.error("Refresh response did not contain an access token:", data);
-        logout(); // Logout if refresh response is invalid
-        throw new Error("Invalid response from token refresh endpoint.");
-      }
-      // --- End of added check ---
-      
-      return newToken;
-    } catch (error) {
-      console.error("Failed to refresh token (exception caught):", error);
-      logout(); // Ensure logout on any exception during refresh
-      throw error;
-    }
-  };
-
-  // Run checkAuthStatus on component mount
+  // Keep refs in sync with state
   useEffect(() => {
-    checkAuthStatus();
+    tokenRef.current = token;
+  }, [token]);
+
+  const navigate = useNavigate();
+
+  const getToken = useCallback((): string | null => {
+    return tokenRef.current || localStorage.getItem('authToken');
   }, []);
 
-  // Login function (using API)
-  const login = async (credentials: { username: string; password: string }) => {
-    setIsLoading(true);
-    console.log("Attempting login via API with:", credentials.username);
-    try {
-      const response = await fetch('/api/v1/token/', { // <<<--- CORRECTED LOGIN ENDPOINT
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(credentials),
-      });
-
-      if (!response.ok) {
-        let errorMsg = "Erreur de connexion inconnue.";
-        try {
-          const errorData = await response.json();
-          // Extract error message from common Django REST Framework formats
-          if (errorData.detail) {
-            errorMsg = errorData.detail;
-          } else if (errorData.non_field_errors) {
-            errorMsg = errorData.non_field_errors.join(' ');
-          } else {
-            // Try to serialize other potential errors
-            errorMsg = JSON.stringify(errorData);
-          }
-        } catch (jsonError) {
-          // If parsing error JSON fails, use status text
-          errorMsg = response.statusText;
-        }
-        throw new Error(errorMsg);
-      }
-
-      const responseData = await response.json(); // Renamed variable for clarity
-      console.log("Login response data:", responseData);
-      
-      // Extract token from the nested data object - handle both formats
-      let authToken, refreshValue;
-      
-      if (responseData.data && responseData.data.access) {
-        // New format with nested data
-        authToken = responseData.data.access;
-        refreshValue = responseData.data.refresh;
-        console.log("Using nested data format for auth tokens");
-      } else if (responseData.access) {
-        // Direct format at root level
-        authToken = responseData.access;
-        refreshValue = responseData.refresh;
-        console.log("Using root level format for auth tokens");
-      }
-      
-      if (!authToken) {
-        // Handle cases where response is OK but token is missing in the expected structure
-        console.error("API response structure unexpected or missing access token:", responseData);
-        throw new Error("Token non reçu ou structure de réponse API inattendue.");
-      }
-
-      console.log("Login API call successful. Token received. Fetching user data...");
-      // Save refresh token
-      if (refreshValue) {
-        setRefreshTokenValue(refreshValue);
-        localStorage.setItem('refreshToken', refreshValue);
-      }
-      
-      // Fetch user data using the NEW token
-      // Pass the explicit authToken to fetchUserData to ensure it's used immediately
-      await fetchUserData(authToken); 
-
-      console.log("Login successful, user data fetched.");
-      
-    } catch (error) {
-      console.error("Login failed:", error);
-      setUser(null);
-      setToken(null);
-      setRefreshTokenValue(null);
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('refreshToken');
-      throw error; // Re-throw error for LoginPage to handle
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Logout function (remains the same for now, potentially add API call later)
-  const logout = () => {
-    console.log("Logging out...");
-    setUser(null);
-    setToken(null);
-    setRefreshTokenValue(null);
+  const logout = useCallback((silent: boolean = false) => {
+    console.log("AuthProvider: Logging out...");
     localStorage.removeItem('authToken');
     localStorage.removeItem('refreshToken');
-    // TODO: Optionally call Django logout endpoint (/api/auth/logout/)
-    console.log("Logout complete.");
-    // Redirect is handled by ProtectedLayout reloading
-  };
+    setUser(null);
+    setIsAuthenticated(false);
+    
+    // Only navigate if not silent mode
+    if (!silent && navigate) {
+      navigate('/login');
+    }
+  }, [navigate]);
 
-  const isAuthenticated = !!user && !!token;
+  const refreshToken = useCallback(async (): Promise<string | null> => {
+    console.log("AuthProvider: refreshToken called");
+    
+    // Too many attempts, log out
+    if (authAttempts >= MAX_AUTH_RETRIES) {
+      console.error("AuthProvider: Max auth retries exceeded, logging out");
+      logout(true);
+      setAuthAttempts(0);
+      return null;
+    }
 
-  const value: AuthContextType = {
+    const currentRefreshToken = localStorage.getItem('refreshToken');
+    if (!currentRefreshToken) {
+      console.error("AuthProvider: No refresh token available, logging out");
+      logout(true);
+      return null;
+    }
+
+    try {
+      // Create a base URL for the refresh request
+      const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      
+      const response = await ky.post(`${baseURL}/api/v1/auth/refresh/`, {
+        json: {
+          refresh: currentRefreshToken
+        },
+        credentials: 'include'
+      }).json();
+
+      const { access, refresh } = response as { access: string; refresh: string };
+      
+      // Store tokens
+      localStorage.setItem('authToken', access);
+      localStorage.setItem('refreshToken', refresh);
+      setToken(access);
+      setRefreshTokenValue(refresh);
+      setAuthAttempts(0); // Reset auth attempts on success
+      
+      // Update authenticated state if we don't already have it
+      if (!isAuthenticated) {
+        setIsAuthenticated(true);
+      }
+
+      console.log("AuthProvider: Token refreshed successfully");
+      return access;
+    } catch (error) {
+      console.error("AuthProvider: Error refreshing token:", error);
+      setAuthAttempts(prev => prev + 1);
+      return null;
+    }
+  }, [logout, MAX_AUTH_RETRIES]); // Remove isAuthenticated and authAttempts from dependencies
+
+  const fetchUserData = useCallback(async (currentToken?: string) => {
+    const token = currentToken || getToken();
+    if (!token) {
+      console.log("AuthProvider: No token available for user data fetch");
+      throw new Error('No authentication token');
+    }
+
+    console.log("AuthProvider: Fetching user data with token");
+    
+    try {
+      const apiUrl = `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/api/v1/users/me/`;
+      console.log("AuthProvider: Fetching user data from:", apiUrl);
+      
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include' // Include cookies if any
+      });
+
+      console.log("AuthProvider: User data fetch status:", response.status);
+      
+      if (!response.ok) {
+        if (response.status === 401) {
+          console.warn("AuthProvider: Unauthorized when fetching user data, token may be invalid");
+          setUser(null);
+          throw new Error('Unauthorized');
+        }
+        throw new Error(`Failed to fetch user data: ${response.statusText}`);
+      }
+
+      const userData = await response.json();
+      console.log("AuthProvider: User data fetched:", userData);
+      
+      // Extract user data, handling possible wrapper structure
+      const user = userData.data || userData;
+      
+      if (!user || !user.id) {
+        console.error("AuthProvider: Invalid user data format:", userData);
+        throw new Error('Invalid user data format');
+      }
+
+      setUser(user);
+      setIsAuthenticated(true);
+      return user;
+    } catch (error) {
+      console.error("AuthProvider: Error fetching user data:", error);
+      if (error instanceof Error && error.message === 'Unauthorized') {
+        // Only for 401 errors
+        logout();
+      }
+      throw error;
+    } finally {
+      // Always mark initial loading as complete once we've tried to fetch user data
+      if (initialLoadingRef.current) {
+        console.log("AuthProvider: Initial loading complete");
+        initialLoadingRef.current = false;
+        setIsLoading(false);
+      }
+    }
+  }, [getToken, logout]);
+
+  // Initialize Ky instance once
+  useEffect(() => {
+    console.log("AuthProvider: Initializing Ky...");
+
+    // Create the Ky extended instance with hooks for auth
+    const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+    
+    const kyInstance = ky.extend({
+      prefixUrl: baseURL,
+      timeout: 10000,
+      credentials: 'include',
+      hooks: {
+        beforeRequest: [
+          request => {
+            const currentToken = tokenRef.current || localStorage.getItem('authToken');
+            if (currentToken) {
+              request.headers.set('Authorization', `Bearer ${currentToken}`);
+            }
+          }
+        ],
+        afterResponse: [
+          async (request, options, response) => {
+            // Handle 401 Unauthorized error (token expired)
+            if (response.status === 401) {
+              // Try to refresh the token
+              console.log("AuthProvider: Ky intercepted 401 response, attempting token refresh");
+              try {
+                const newToken = await refreshToken();
+                if (newToken) {
+                  // Clone request and retry with new token
+                  const newRequest = request.clone();
+                  newRequest.headers.set('Authorization', `Bearer ${newToken}`);
+                  console.log("AuthProvider: Retrying request with new token");
+                  return ky(newRequest);
+                }
+              } catch (refreshError) {
+                console.error("AuthProvider: Token refresh failed in interceptor", refreshError);
+                // Let the error flow through
+              }
+            }
+            return response;
+          }
+        ]
+      }
+    });
+
+    kyInstanceRef.current = kyInstance;
+    
+    console.log("AuthProvider: Ky instance initialized");
+  }, []); // Empty dependency array ensures this runs only once
+
+  // --- Vérification d'Authentification Initiale (une seule fois) ---
+  useEffect(() => {
+    let isMounted = true; // For avoiding state updates after unmount
+    
+    const runInitialCheck = async () => {
+      // Empêcher exécutions multiples si HMR rapide ou autre bug
+      if (isInitialCheckRunning) return;
+      setIsInitialCheckRunning(true);
+
+      console.log("AuthProvider: Starting initial auth check...");
+      const storedToken = localStorage.getItem('authToken');
+      const storedRefreshToken = localStorage.getItem('refreshToken');
+      
+      if (isMounted) {
+        setRefreshTokenValue(storedRefreshToken); // Définir pour les appels futurs éventuels
+      }
+
+      if (storedToken && isMounted) {
+        console.log("AuthProvider: Initial check - Found auth token.");
+        try {
+          await fetchUserData(storedToken); // Essayer de charger les données utilisateur
+          console.log("AuthProvider: Initial check - User data loaded successfully.");
+        } catch (error) {
+          console.warn("AuthProvider: Initial check - Fetch user data failed. Refresh might be attempted by interceptor or next logic.", error);
+          // L'erreur 401 est gérée par l'interceptor Ky qui appelle refreshToken.
+          // Si fetchUserData échoue pour une autre raison ou si le refresh échoue, logout(true) est appelé DANS ces fonctions.
+          // Si fetchUserData réussit après un refresh (via intercepteur), l'état est déjà bon.
+        }
+      } else if (isMounted) {
+        console.log("AuthProvider: Initial check - No auth token found.");
+        // Assurer un état propre si aucun token
+        logout(true); // Logout pendant check initial sans arrêter isLoading
+      }
+
+      if (isMounted) {
+        console.log("AuthProvider: Initial auth check finished.");
+        setIsLoading(false); // Terminer l'état de chargement initial ICI
+        setIsInitialCheckRunning(false);
+      }
+    };
+
+    runInitialCheck();
+    
+    return () => {
+      isMounted = false; // Prevent state updates if component unmounts
+    };
+  }, []); // Run only once on component mount
+
+  // --- Login ---
+  const login = useCallback(async (credentials: { username: string; password: string }) => {
+    console.log("AuthProvider: Attempting login...");
+    // Ne pas utiliser setIsLoading ici, gérer l'état de chargement dans le composant LoginPage
+    try {
+      const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const tokenUrl = `${baseURL}/api/v1/token/`;
+      console.log("AuthProvider: Making login request to:", tokenUrl);
+      
+      const response = await ky.post(tokenUrl, {
+        json: credentials,
+        credentials: 'include',
+      }).json();
+
+      const data = response as any;
+      console.log("AuthProvider: Login response data structure:", Object.keys(data));
+      console.log("AuthProvider: Full response data:", data);
+      
+      // Extract tokens from our custom response format that wraps data
+      const tokenData = data.data || data;
+      console.log("AuthProvider: Token data after unwrapping:", tokenData);
+      
+      const newAuthToken = tokenData.access;
+      const newRefreshToken = tokenData.refresh;
+
+      if (!newAuthToken) {
+        console.log("AuthProvider: Login response missing token. Response:", data);
+        console.log("AuthProvider: Unwrapped token data:", tokenData);
+        throw new Error("Login missing access token.");
+      }
+
+      console.log("AuthProvider: Login API success. Setting tokens.");
+      setToken(newAuthToken);
+      setRefreshTokenValue(newRefreshToken);
+      localStorage.setItem('authToken', newAuthToken);
+      if (newRefreshToken) localStorage.setItem('refreshToken', newRefreshToken);
+      else localStorage.removeItem('refreshToken');
+
+      try {
+        // Fetch user data AFTER token setup
+        await fetchUserData(newAuthToken);
+        console.log("AuthProvider: Login complete, user data fetched.");
+      } catch (userDataError) {
+        console.error("AuthProvider: Error fetching user data after login:", userDataError);
+        // If we can't fetch user data, still consider login successful but show warning
+        console.warn("AuthProvider: Login succeeded but user data fetch failed. Will try again on next page load.");
+        // Don't logout here, just return and let the app continue
+      }
+
+    } catch (error) {
+      console.error("AuthProvider: Login failed:", error);
+      logout(); // Logout complet en cas d'échec du login
+      throw error; // Propager pour le formulaire
+    }
+  }, [fetchUserData, logout]);
+
+  // Create a safe wrapper for Ky that checks if the instance is initialized
+  const authClient = useMemo(() => ({
+    get: async (url: string, options?: any) => {
+      if (!kyInstanceRef.current) throw new Error("Ky client not initialized");
+      return kyInstanceRef.current.get(url, options);
+    },
+    post: async (url: string, options?: any) => {
+      if (!kyInstanceRef.current) throw new Error("Ky client not initialized");
+      return kyInstanceRef.current.post(url, options);
+    },
+    put: async (url: string, options?: any) => {
+      if (!kyInstanceRef.current) throw new Error("Ky client not initialized");
+      return kyInstanceRef.current.put(url, options);
+    },
+    delete: async (url: string, options?: any) => {
+      if (!kyInstanceRef.current) throw new Error("Ky client not initialized");
+      return kyInstanceRef.current.delete(url, options);
+    },
+    patch: async (url: string, options?: any) => {
+      if (!kyInstanceRef.current) throw new Error("Ky client not initialized");
+      return kyInstanceRef.current.patch(url, options);
+    }
+  }), []); // No dependencies needed since we use ref
+
+  const value: AuthContextType = useMemo(() => ({
     user,
     token,
     isAuthenticated,
-    isLoading,
+    isLoading, // Fournir cet état pour l'écran de chargement initial
     login,
-    logout,
-    checkAuthStatus,
+    logout: () => logout(false), // Exposer un logout qui arrête isLoading
+    checkAuthStatus: async () => { /* Implémentation si nécessaire */ },
     refreshToken,
-    authAxios,
-  };
+    authAxios: authClient, // Exposer le client Ky avec la même interface qu'avant
+  }), [user, token, isAuthenticated, isLoading, login, logout, refreshToken, authClient]);
 
   return (
     <AuthContext.Provider value={value}>
@@ -411,5 +363,5 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   );
 };
 
-// Re-export useAuth for convenience
-export { useAuth }; 
+// Réexporter useAuth pour s'assurer qu'il est disponible
+// export { useAuth }; // Si useAuth est défini dans AuthContext.tsx, cette ligne peut être commentée ou retirée. 

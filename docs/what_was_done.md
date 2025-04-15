@@ -647,4 +647,38 @@ Nous avons développé une page complète de gestion des clients avec les foncti
 - Implémentation de l'exportation des données clients
 - Ajout de la possibilité de trier les colonnes du tableau
 
-Cette implémentation respecte les exigences du document des spécifications pour l'interface admin web, en particulier pour la localisation en français et les formats de données spécifiques au marché tunisien. 
+Cette implémentation respecte les exigences du document des spécifications pour l'interface admin web, en particulier pour la localisation en français et les formats de données spécifiques au marché tunisien.
+
+# E-Car Admin Portal - Development Log
+
+## Latest Update: Migrating from Axios to Ky (14 Avril 2025)
+
+We've completed the migration from Axios to Ky for HTTP requests. This change brings several benefits:
+
+- **Better Performance**: Ky is much smaller (~7KB vs. Axios's larger size) and uses the browser's modern Fetch API
+- **Improved TypeScript Support**: First-class type definitions and a more modern API
+- **Better Promise Handling**: Cleaner chaining with `.json()`, `.text()`, etc. methods
+- **More Reliable Auth Flow**: Better token refresh handling with less potential for race conditions
+
+### Key Changes:
+
+1. **AuthProvider.tsx**:
+   - Replaced Axios with Ky for all HTTP requests
+   - Updated token management and auth interceptors to use Ky's hooks system
+   - Simplified state management by eliminating the Axios instance state
+   - Created a stable Ky client using `useMemo` to prevent unnecessary recreations
+
+2. **Components Using API Calls**:
+   - Updated API calls in `VehiclesPage.tsx` and `AddVehicleModal.tsx` to use the Ky syntax
+   - Updated error handling to properly parse Ky-specific error objects
+   - Fixed the authentication refresh flow to properly handle 401 responses
+
+3. **Documentation**:
+   - Created a new `http_client_standards.md` document with guidelines and examples
+   - Updated checkpoint documentation to reflect the technical changes
+
+For more details on implementation and usage patterns, please refer to `docs/http_client_standards.md`.
+
+---
+
+## Previous Updates 

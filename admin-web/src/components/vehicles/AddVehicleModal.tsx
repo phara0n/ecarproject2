@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useAuth } from '@/context/AuthProvider';
+import { useAuth } from '@/context/AuthContext';
 import { AlertCircle, ChevronsUpDown, Check, Info } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
@@ -29,6 +29,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { formatLicensePlate } from "@/utils/formatters";
+import { z } from "zod";
 
 // Type definitions
 interface AddVehicleModalProps {
@@ -83,8 +85,35 @@ interface ValidationErrors {
 
 type FormFields = keyof VehicleFormData | keyof CustomerFormData | 'owner';
 
+// Créer un schéma de validation Zod pour les plaques d'immatriculation tunisiennes
+const licensePlateSchema = z.string()
+  .min(1, { error: "La plaque d'immatriculation est requise" })
+  // Utilisation du nouveau système d'erreur de Zod v4
+  .regex(/^\d{1,3}(TU|RS)\d{1,4}$/i, {
+    error: (issue) => `Format de plaque d'immatriculation invalide. Utilisez le format: 123TU1234 ou 123RS1234. Reçu: "${issue.input}"`
+  });
+
+// Nouvelle fonctionnalité Zod v4: littéraux multiples
+const plateTypeSchema = z.literal(["TU", "RS"]);
+
+// Schéma complet pour le véhicule 
+const vehicleSchema = z.object({
+  registration_number: licensePlateSchema,
+  make: z.string().min(1, { error: "La marque est requise" }),
+  model: z.string().min(1, { error: "Le modèle est requis" }),
+  year: z.string()
+    .refine(val => !isNaN(Number(val)) && Number(val) >= 1900 && Number(val) <= new Date().getFullYear(), {
+      error: `L'année doit être un nombre entre 1900 et ${new Date().getFullYear()}`
+    }),
+  initial_mileage: z.string()
+    .refine(val => !isNaN(Number(val)) && Number(val) >= 0, {
+      error: "Le kilométrage initial doit être un nombre positif"
+    }),
+  vin: z.string().optional(),
+});
+
 const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange, onVehicleAdded }) => {
-  const { token } = useAuth();
+  const { authAxios } = useAuth();
 
   // State Management
   const [addMode, setAddMode] = useState<'select' | 'create'>('select');
@@ -139,12 +168,8 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange,
     }
   }, [isOpen]);
 
-  // Re-introduce fetchCustomers
+  // Update the fetchCustomers function to use authAxios
   const fetchCustomers = async () => {
-    if (!token) {
-      setCustomerListError("Authentification requise.");
-      return;
-    }
     setIsCustomerListLoading(true);
     setCustomerListError(null);
     setCustomers([]);
@@ -152,18 +177,9 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange,
 
     try {
       console.log("[AddVehicleModal] Fetching customers from /api/v1/users/customers/");
-      const response = await fetch('/api/v1/users/customers/', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) throw new Error('Non autorisé.');
-        throw new Error(`Erreur ${response.status} lors du chargement des clients`);
-      }
-
+      
+      // Use Ky client through authAxios - separate response and json steps
+      const response = await authAxios.get('api/v1/users/customers/');
       const responseData = await response.json();
       console.log("[AddVehicleModal] Customer list response:", responseData);
       
@@ -183,13 +199,20 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange,
 
     } catch (err) {
       console.error("[AddVehicleModal] Error fetching customers:", err);
-      setCustomerListError(err instanceof Error ? err.message : 'Impossible de charger les clients');
+      // Handle Ky errors
+      let errorMessage = 'Impossible de charger les clients';
+      if (err.response && err.response.status) {
+        errorMessage = `Erreur ${err.response.status}: ${err.response.statusText || 'Impossible de charger les clients'}`;
+      } else if (err instanceof Error) {
+        errorMessage = err.message;
+      }
+      setCustomerListError(errorMessage);
     } finally {
       setIsCustomerListLoading(false);
     }
   };
 
-  // Fetch customers when modal opens or mode switches to 'select'
+  // Update the useEffect dependency to use authAxios instead of token
   useEffect(() => {
     if (isOpen && addMode === 'select') {
       fetchCustomers();
@@ -199,7 +222,7 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange,
       const { owner, ...restErrors } = validationErrors;
       setValidationErrors(restErrors);
     }
-  }, [isOpen, addMode, token]);
+  }, [isOpen, addMode]);
 
   // Get customer display name helper
   const getCustomerDisplayName = (customer: Customer | undefined) => {
@@ -342,18 +365,62 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange,
   };
 
   // Update handleInputChange
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    const fieldName = name as FormFields;
-
-    if (fieldName in vehicleFormData) {
-      setVehicleFormData(prev => ({ ...prev, [fieldName]: value }));
-    } else if (fieldName in customerFormData) {
-      setCustomerFormData(prev => ({ ...prev, [fieldName]: value }));
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
+    field: FormFields
+  ) => {
+    if (field === 'registration_number') {
+      const value = e.target.value.toUpperCase();
+      setVehicleFormData({
+        ...vehicleFormData,
+        registration_number: value
+      });
+      
+      // Valider avec le schéma Zod
+      try {
+        licensePlateSchema.parse(value);
+        // Si valide, effacer l'erreur
+        setValidationErrors({
+          ...validationErrors,
+          registration_number: undefined
+        });
+      } catch (error) {
+        // Si le format est incorrect et que l'utilisateur a commencé à taper
+        if (value && value.length > 2) {
+          setValidationErrors({
+            ...validationErrors,
+            registration_number: "Format de plaque d'immatriculation invalide. Utilisez le format: 123TU1234 ou 123RS1234"
+          });
+        }
+      }
+    } else {
+      // Gestion normale pour les autres champs
+      if (field in vehicleFormData) {
+        setVehicleFormData(prev => ({
+          ...prev,
+          [field]: e.target.value
+        }));
+        // Clear error when field is edited
+        if (validationErrors[field]) {
+          setValidationErrors({
+            ...validationErrors,
+            [field]: undefined
+          });
+        }
+      } else if (field in customerFormData) {
+        setCustomerFormData(prev => ({
+          ...prev,
+          [field]: e.target.value
+        }));
+        // Clear error when field is edited
+        if (validationErrors[field]) {
+          setValidationErrors({
+            ...validationErrors,
+            [field]: undefined
+          });
+        }
+      }
     }
-
-    setTouchedFields(prev => ({ ...prev, [fieldName]: true }));
-    validateField(fieldName, value);
   };
 
   // Re-introduce handleOwnerSelect
@@ -393,7 +460,9 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange,
           phone_number: customerFormData.phone,
         };
 
-        const customerResponse = await fetch('/api/v1/register/', {
+        // Use direct ky for customer creation (no token needed for registration)
+        const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const customerResponse = await fetch(`${baseURL}/api/v1/register/`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -426,7 +495,7 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange,
         const newCustomerData = await customerResponse.json();
         console.log("[AddVehicleModal] Raw customer creation response body:", JSON.stringify(newCustomerData, null, 2));
 
-        // Try extracting the ID using common patterns
+        // Extract the customer ID as before...
         let createdId: number | string | null | undefined = null;
 
         if (typeof newCustomerData === 'object' && newCustomerData !== null) {
@@ -442,24 +511,20 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange,
         console.log("[AddVehicleModal] Attempted to extract ID. Value found:", createdId);
 
         if (!createdId) {
-          // Improve error message slightly
           console.error("Could not find customer ID in response:", newCustomerData);
           throw new Error("Impossible de trouver l'ID du client dans la réponse de l'API après création.");
         }
-        ownerIdToUse = Number(createdId); // Convert to number if needed
+        ownerIdToUse = Number(createdId);
 
       } catch (err) {
+        // Error handling for customer creation as before...
         console.error("[AddVehicleModal] Error creating customer:", err);
-        // Attempt to parse backend validation errors
         let specificErrorMessage = 'Échec création client';
         if (err instanceof Error && err.message.includes('Erreur 400')) { 
-          // Try to extract details if it was a 400 error from our fetch logic
           try {
-            // Example: Error: Erreur 400 lors de la création du client: { ... json string ... }
             const jsonErrorString = err.message.substring(err.message.indexOf(':') + 1).trim();
             const errorData = JSON.parse(jsonErrorString); 
             
-            // Check for common DRF error structures
             if (typeof errorData === 'object' && errorData !== null) {
                const fieldErrors = Object.entries(errorData)
                  .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`)
@@ -469,7 +534,6 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange,
                } else if (errorData.detail) {
                    specificErrorMessage = errorData.detail; 
                } else if (errorData.error) { 
-                   // Handle our custom { metadata, data, error } structure if backend uses it for errors too
                    if (typeof errorData.error === 'object' && errorData.error !== null) {
                        specificErrorMessage = errorData.error.message || JSON.stringify(errorData.error);
                    } else {
@@ -477,19 +541,17 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange,
                    }
                }
             } else {
-                // Fallback if parsing gives unexpected structure
                 specificErrorMessage = jsonErrorString;
             }
           } catch (parseErr) {
-             // If JSON parsing fails, stick to the original error message part
              specificErrorMessage = err.message; 
           }
         } else if (err instanceof Error) {
-             specificErrorMessage = err.message; // Use original error message for non-400s
+             specificErrorMessage = err.message;
         }
         setServerError(specificErrorMessage);
         setIsLoading(false);
-        return; // Stop if customer creation fails
+        return;
       }
     }
 
@@ -507,34 +569,34 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange,
           owner_id: ownerIdToUse
         };
 
-        const vehicleResponse = await fetch('/api/v1/vehicles/', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-          body: JSON.stringify(vehiclePayload),
-      });
-
-        if (!vehicleResponse.ok) {
-          let errorMessage = `Erreur ${vehicleResponse.status} lors de l'ajout du véhicule`;
-        try {
-            const errorData = await vehicleResponse.json();
-          errorMessage = errorData?.detail || errorData?.error || JSON.stringify(errorData);
-        } catch (parseError) {
-            errorMessage += `: ${vehicleResponse.statusText}`;
+        // Use authAxios with Ky syntax for vehicle creation
+        const response = await authAxios.post('api/v1/vehicles/', {
+          json: vehiclePayload
+        });
+        const responseData = await response.json();
+        
+        console.log("[AddVehicleModal] Vehicle created successfully:", responseData);
+        onVehicleAdded();
+        onOpenChange(false);
+      } catch (err) {
+        console.error("[AddVehicleModal] Error creating vehicle:", err);
+        // Handle Ky errors
+        const action = addMode === 'create' ? `Client créé (ID: ${ownerIdToUse}), mais ` : '';
+        let errorMessage = 'Erreur inconnue';
+        
+        if (err.response) {
+          try {
+            const errorData = await err.response.json();
+            errorMessage = errorData?.detail || errorData?.error || JSON.stringify(errorData);
+          } catch (parseError) {
+            errorMessage = `Erreur ${err.response.status}: ${err.response.statusText}`;
           }
-          throw new Error(errorMessage);
+        } else if (err instanceof Error) {
+          errorMessage = err.message;
         }
         
-        console.log("[AddVehicleModal] Vehicle created successfully.");
-      onVehicleAdded();
-      onOpenChange(false);
-    } catch (err) {
-        console.error("[AddVehicleModal] Error creating vehicle:", err);
-        const action = addMode === 'create' ? `Client créé (ID: ${ownerIdToUse}), mais ` : '';
-        setServerError(`${action}échec ajout véhicule: ${err instanceof Error ? err.message : 'Erreur inconnue'}`);
-    } finally {
+        setServerError(`${action}échec ajout véhicule: ${errorMessage}`);
+      } finally {
         setIsLoading(false);
       }
     } else {
@@ -654,7 +716,7 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange,
                         id="first_name"
                         name="first_name"
                         value={customerFormData.first_name}
-                        onChange={handleInputChange}
+                        onChange={(e) => handleInputChange(e, 'first_name')}
                         className={cn("h-10 bg-background text-foreground", touchedFields.first_name && validationErrors.customer_first_name ? "border-destructive" : "border-input")}
                         placeholder="Prénom"
                       />
@@ -668,7 +730,7 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange,
                         id="last_name"
                         name="last_name"
                         value={customerFormData.last_name}
-                        onChange={handleInputChange}
+                        onChange={(e) => handleInputChange(e, 'last_name')}
                         className={cn("h-10 bg-background text-foreground", touchedFields.last_name && validationErrors.customer_last_name ? "border-destructive" : "border-input")}
                         placeholder="Nom de famille"
                       />
@@ -684,7 +746,7 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange,
                         id="username"
                         name="username"
                         value={customerFormData.username}
-                        onChange={handleInputChange}
+                        onChange={(e) => handleInputChange(e, 'username')}
                         className={cn("h-10 bg-background text-foreground", touchedFields.username && validationErrors.customer_username ? "border-destructive" : "border-input")}
                         placeholder="utilisateur123"
                       />
@@ -699,7 +761,7 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange,
                         name="email"
                         type="email"
                         value={customerFormData.email}
-                        onChange={handleInputChange}
+                        onChange={(e) => handleInputChange(e, 'email')}
                         className={cn("h-10 bg-background text-foreground", touchedFields.email && validationErrors.customer_email ? "border-destructive" : "border-input")}
                         placeholder="email@example.com"
                       />
@@ -715,7 +777,7 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange,
                         id="phone"
                         name="phone"
                         value={customerFormData.phone}
-                        onChange={handleInputChange}
+                        onChange={(e) => handleInputChange(e, 'phone')}
                         className={cn("h-10 bg-background text-foreground", touchedFields.phone && validationErrors.customer_phone ? "border-destructive" : "border-input")}
                         placeholder="+216XXXXXXXX"
                       />
@@ -734,7 +796,7 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange,
                         name="password"
                         type="password"
                         value={customerFormData.password}
-                        onChange={handleInputChange}
+                        onChange={(e) => handleInputChange(e, 'password')}
                         className={cn("h-10 bg-background text-foreground", touchedFields.password && validationErrors.customer_password ? "border-destructive" : "border-input")}
                         placeholder="********"
                       />
@@ -751,7 +813,7 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange,
                         name="password2"
                         type="password"
                         value={customerFormData.password2}
-                        onChange={handleInputChange}
+                        onChange={(e) => handleInputChange(e, 'password2')}
                         className={cn("h-10 bg-background text-foreground", touchedFields.password2 && validationErrors.customer_password2 ? "border-destructive" : "border-input")}
                         placeholder="********"
                       />
@@ -775,7 +837,7 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange,
                     id="registration_number"
                     name="registration_number"
                     value={vehicleFormData.registration_number}
-                    onChange={handleInputChange}
+                    onChange={(e) => handleInputChange(e, 'registration_number')}
                     className={cn(
                       "h-12 text-lg font-medium bg-background text-foreground",
                       touchedFields.registration_number && validationErrors.registration_number 
@@ -801,7 +863,7 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange,
                       id="make"
                       name="make"
                       value={vehicleFormData.make}
-                      onChange={handleInputChange}
+                      onChange={(e) => handleInputChange(e, 'make')}
                       className={cn(
                         "h-10 bg-background text-foreground",
                         touchedFields.make && validationErrors.make ? "border-destructive" : "border-input"
@@ -822,7 +884,7 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange,
                       id="model"
                       name="model"
                       value={vehicleFormData.model}
-                      onChange={handleInputChange}
+                      onChange={(e) => handleInputChange(e, 'model')}
                       className={cn(
                         "h-10 bg-background text-foreground",
                         touchedFields.model && validationErrors.model ? "border-destructive" : "border-input"
@@ -845,7 +907,7 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange,
                       name="year"
                       type="number"
                       value={vehicleFormData.year}
-                      onChange={handleInputChange}
+                      onChange={(e) => handleInputChange(e, 'year')}
                       className={cn(
                         "h-10 bg-background text-foreground",
                         touchedFields.year && validationErrors.year ? "border-destructive" : "border-input"
@@ -869,7 +931,7 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange,
                       name="initial_mileage"
                       type="number"
                       value={vehicleFormData.initial_mileage}
-                      onChange={handleInputChange}
+                      onChange={(e) => handleInputChange(e, 'initial_mileage')}
                       className={cn(
                         "h-10 bg-background text-foreground",
                         touchedFields.initial_mileage && validationErrors.initial_mileage 
@@ -904,7 +966,7 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ isOpen, onOpenChange,
                     id="vin"
                     name="vin"
                     value={vehicleFormData.vin}
-                    onChange={handleInputChange}
+                    onChange={(e) => handleInputChange(e, 'vin')}
                     className={cn(
                       "font-mono bg-background text-foreground",
                       touchedFields.vin && validationErrors.vin ? "border-destructive" : "border-input"

@@ -1,4 +1,4 @@
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from rest_framework import viewsets, permissions, generics
 from django.contrib.auth import get_user_model
 from .models import Vehicle, MileageRecord, ServiceType, ServiceEvent, PredictionRule, ServicePrediction, Invoice
@@ -17,6 +17,7 @@ from rest_framework.response import Response
 from rest_framework import serializers
 from django.contrib.auth.models import Group
 from rest_framework import exceptions
+from django.views import View
 
 # Get User model instance
 User = get_user_model()
@@ -1013,3 +1014,11 @@ class UserViewSet(viewsets.ModelViewSet):
         #     return Response({"detail": "Vous ne pouvez pas supprimer votre propre compte administrateur."},
         #                     status=status.HTTP_403_FORBIDDEN)
         return super().destroy(request, *args, **kwargs)
+
+class IndexRedirectView(View):
+    """
+    Vue pour la racine du site qui redirige vers la documentation Swagger.
+    Cela évite les erreurs 404 lorsque le frontend essaie d'accéder à la racine.
+    """
+    def get(self, request):
+        return redirect('schema-swagger-ui')

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { PlusIcon, RefreshCw, AlertCircle, TrendingUpIcon } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { useAuth } from '@/context/AuthProvider';
+import { useAuth } from '@/context/AuthContext';
 
 // Define the MileageRecord interface based on the actual API response
 interface MileageRecord {

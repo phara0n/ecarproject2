@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useTheme } from '@/components/theme-provider';
-import { useAuth } from '@/context/AuthProvider';
+import { useAuth } from '@/context/AuthContext';
 import { MoonIcon, SunIcon, SettingsIcon, UserIcon, ShieldIcon, BellIcon } from 'lucide-react';
 
 const SettingsPage = () => {

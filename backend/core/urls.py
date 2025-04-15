@@ -24,6 +24,7 @@ from rest_framework_simplejwt.views import (
 from garage.views import RegisterView 
 from django.contrib.auth import views as auth_views # Import auth views
 from garage.views import CurrentUserView # Added import for CurrentUserView
+from garage.views import IndexRedirectView # Import for root redirect view
 
 # Imports for serving media files during development
 from django.conf import settings
@@ -125,6 +126,8 @@ class TokenRefreshView(BaseTokenRefreshView):
 # --- Main URL Patterns --- 
 
 urlpatterns = [
+    # Root URL - redirect to Swagger UI
+    path('', IndexRedirectView.as_view(), name='index'),
     path('admin/', admin.site.urls),
     # API v1 URLs
     path('api/v1/register/', RegisterView.as_view(), name='register'), 

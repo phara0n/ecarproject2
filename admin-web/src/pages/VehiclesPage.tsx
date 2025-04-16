@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useAuth } from '@/context/AuthContext';
 import AddVehicleModal from '@/components/vehicles/AddVehicleModal';
 import { VehicleDetailsModal } from '@/components/vehicles/VehicleDetailsModal';
+import { useNavigate } from 'react-router-dom';
 
 // Define the Vehicle interface based on the actual API response
 interface Vehicle {
@@ -36,6 +37,7 @@ interface Vehicle {
 
 const VehiclesPage = () => {
   const { authAxios } = useAuth();
+  const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -49,34 +51,36 @@ const VehiclesPage = () => {
     setError(null);
     
     try {
-      // Call get() without chaining .json() - we'll await the response first
       const response = await authAxios.get('api/v1/vehicles/');
-      // Then parse the JSON response
       const responseData = await response.json();
       console.log('API response:', responseData);
-
-      // Extract vehicles from nested data field if needed
       const vehiclesData = responseData.data || responseData;
-      
       if (!Array.isArray(vehiclesData)) {
         throw new Error('Format de réponse API inattendu pour les véhicules');
       }
-
-      // Log the entire first vehicle to see exact structure
       if (vehiclesData.length > 0) {
         console.log('First vehicle structure (complete):', JSON.stringify(vehiclesData[0], null, 2));
       }
-
       setVehicles(vehiclesData);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching vehicles:', err);
-      // Ky errors might need different handling
       let errorMessage = 'Une erreur est survenue';
-      // Check if it's a Ky HTTPError
       if (err.response && err.response.status) {
         errorMessage = `Erreur ${err.response.status}: ${err.response.statusText || 'Erreur lors de la récupération des véhicules'}`;
+        if (err.response.status === 401) {
+          navigate('/login');
+          return;
+        }
       } else if (err instanceof Error) {
         errorMessage = err.message;
+        if (
+          errorMessage.includes('Authentification requise') ||
+          errorMessage.includes('session expirée') ||
+          errorMessage.includes('token_not_valid')
+        ) {
+          navigate('/login');
+          return;
+        }
       }
       setError(errorMessage);
     } finally {
@@ -157,19 +161,19 @@ const VehiclesPage = () => {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 bg-background min-h-screen">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Gestion des Véhicules</h1>
+        <h1 className="text-3xl font-bold text-primary">Gestion des Véhicules</h1>
         <div className="flex space-x-2">
-          <Button variant="outline">
+          <Button className="bg-muted text-primary hover:bg-accent rounded-lg border-none shadow-sm" type="button">
             <FilterIcon className="w-4 h-4 mr-2" />
             Filtrer
           </Button>
-          <Button variant="outline" onClick={fetchVehicles} disabled={isLoading}>
+          <Button className="bg-muted text-primary hover:bg-accent rounded-lg border-none shadow-sm" onClick={fetchVehicles} disabled={isLoading} type="button">
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Actualiser
           </Button>
-          <Button onClick={() => setIsAddModalOpen(true)}>
+          <Button className="bg-primary text-white hover:bg-primary/80 rounded-lg shadow" onClick={() => setIsAddModalOpen(true)} type="button">
             <PlusIcon className="w-4 h-4 mr-2" />
             Nouveau Véhicule
           </Button>
@@ -178,7 +182,7 @@ const VehiclesPage = () => {
 
       {/* Error display */}
       {error && (
-        <Alert variant="destructive" className="my-4">
+        <Alert variant="destructive" className="my-4 bg-destructive/10 border-destructive text-destructive rounded-lg">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Erreur</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
@@ -188,7 +192,7 @@ const VehiclesPage = () => {
       <div className="grid grid-cols-1 gap-6">
         {/* Overview cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card>
+          <Card className="bg-muted text-primary rounded-lg shadow">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Total Véhicules</CardTitle>
               <CardDescription>Parc automobile</CardDescription>
@@ -201,7 +205,7 @@ const VehiclesPage = () => {
               )}
             </CardContent>
           </Card>
-          <Card>
+          <Card className="bg-muted text-primary rounded-lg shadow">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Kilomètrage Moyen</CardTitle>
               <CardDescription>Tous véhicules</CardDescription>
@@ -216,7 +220,7 @@ const VehiclesPage = () => {
               )}
             </CardContent>
           </Card>
-          <Card>
+          <Card className="bg-muted text-primary rounded-lg shadow">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Moyenne Quotidienne</CardTitle>
               <CardDescription>km/jour</CardDescription>
@@ -234,7 +238,7 @@ const VehiclesPage = () => {
         </div>
 
         {/* Vehicles table */}
-        <Card>
+        <Card className="bg-muted text-primary rounded-lg shadow">
           <CardHeader>
             <CardTitle>Véhicules</CardTitle>
             <CardDescription>Gérez votre parc automobile</CardDescription>

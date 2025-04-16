@@ -6,6 +6,7 @@ import { PlusIcon, RefreshCw, AlertCircle, TrendingUpIcon } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useAuth } from '@/context/AuthContext';
+import { formatDate } from '@/utils/formatters';
 
 // Define the MileageRecord interface based on the actual API response
 interface MileageRecord {
@@ -24,11 +25,17 @@ interface MileageRecord {
   comment?: string;
 }
 
+// Type minimal pour véhicule
+type Vehicle = { id: number; registration_number: string };
+
 const SuiviKilometrique = () => {
   const { token } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [mileageRecords, setMileageRecords] = useState<MileageRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [vehicleMap, setVehicleMap] = useState<Record<number, string>>({});
+  const [search, setSearch] = useState('');
 
   // Function to fetch mileage records from the API
   const fetchMileageRecords = async () => {
@@ -74,6 +81,32 @@ const SuiviKilometrique = () => {
   // Fetch mileage records on component mount
   useEffect(() => {
     fetchMileageRecords();
+  }, [token]);
+
+  // Fetch la liste des véhicules pour mapping id->plaque
+  useEffect(() => {
+    const fetchVehicles = async () => {
+      try {
+        const response = await fetch('/api/v1/vehicles/', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        if (!response.ok) throw new Error('Erreur lors du chargement des véhicules');
+        const data = await response.json();
+        const arr = data.data || data || [];
+        setVehicles(arr);
+        // Créer le mapping id -> plaque
+        const map: Record<number, string> = {};
+        arr.forEach((v: any) => { if (v.id && v.registration_number) map[v.id] = v.registration_number; });
+        setVehicleMap(map);
+      } catch (e) {
+        setVehicles([]);
+        setVehicleMap({});
+      }
+    };
+    fetchVehicles();
   }, [token]);
 
   // Helper to get the best available field with fallbacks
@@ -129,16 +162,29 @@ const SuiviKilometrique = () => {
       : '0';
   };
 
+  // Filtrage côté client sur plaque, ID, commentaire
+  const filteredRecords = mileageRecords.filter(record => {
+    const id = getMileageField(record, ['vehicule_id', 'vehicle_id', 'vehicle']);
+    const plaque = (typeof id === 'number' && vehicleMap[id]) ? vehicleMap[id] : (typeof id === 'string' && vehicleMap[parseInt(id)]) ? vehicleMap[parseInt(id)] : '';
+    const comment = getMileageField(record, ['commentaire', 'comment'], '');
+    const searchLower = search.toLowerCase();
+    return (
+      (plaque && plaque.toLowerCase().includes(searchLower)) ||
+      (id && String(id).toLowerCase().includes(searchLower)) ||
+      (comment && comment.toLowerCase().includes(searchLower))
+    );
+  });
+
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 bg-background text-primary min-h-screen">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Suivi Kilométrique</h1>
-        <div className="flex space-x-2">
-          <Button variant="outline" onClick={fetchMileageRecords} disabled={isLoading}>
+        <h1 className="text-3xl font-bold text-primary">Suivi Kilométrique</h1>
+        <div className="flex gap-2 items-center">
+          <Button className="bg-muted text-primary hover:bg-accent rounded-lg border-none shadow-sm" onClick={fetchMileageRecords} disabled={isLoading} type="button">
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Actualiser
           </Button>
-          <Button>
+          <Button className="bg-primary text-white hover:bg-primary/80 rounded-lg shadow" type="button"> {/* TODO: Open modal */}
             <PlusIcon className="w-4 h-4 mr-2" />
             Nouvel Enregistrement
           </Button>
@@ -147,7 +193,7 @@ const SuiviKilometrique = () => {
 
       {/* Error display */}
       {error && (
-        <Alert variant="destructive" className="my-4">
+        <Alert variant="destructive" className="my-4 bg-destructive/10 border-destructive text-destructive rounded-lg">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Erreur</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
@@ -157,10 +203,10 @@ const SuiviKilometrique = () => {
       <div className="grid grid-cols-1 gap-6">
         {/* Overview cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card>
+          <Card className="bg-muted text-primary rounded-lg shadow">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Total Enregistrements</CardTitle>
-              <CardDescription>Nombre</CardDescription>
+              <CardDescription>Nombre total</CardDescription>
             </CardHeader>
             <CardContent>
               {isLoading ? (
@@ -170,7 +216,7 @@ const SuiviKilometrique = () => {
               )}
             </CardContent>
           </Card>
-          <Card>
+          <Card className="bg-muted text-primary rounded-lg shadow">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Kilométrage Moyen</CardTitle>
               <CardDescription>Tous véhicules</CardDescription>
@@ -185,7 +231,7 @@ const SuiviKilometrique = () => {
               )}
             </CardContent>
           </Card>
-          <Card>
+          <Card className="bg-muted text-primary rounded-lg shadow">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Dernier Kilométrage</CardTitle>
               <CardDescription>Enregistrement le plus récent</CardDescription>
@@ -202,68 +248,95 @@ const SuiviKilometrique = () => {
           </Card>
         </div>
 
-        {/* Mileage records table */}
-        <Card>
+        {/* Champ de recherche au-dessus du tableau */}
+        <div className="flex justify-center mb-4">
+          <input
+            type="text"
+            placeholder="Rechercher (plaque, ID, commentaire...)"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="input input-bordered pl-3 pr-2 py-1 rounded-lg bg-muted text-primary border-none focus:ring-2 focus:ring-primary"
+            style={{ minWidth: 320 }}
+          />
+        </div>
+        <Card className="md:col-span-3 bg-muted text-primary rounded-lg shadow">
           <CardHeader>
-            <CardTitle>Enregistrements de Kilométrage</CardTitle>
-            <CardDescription>Historique de tous les relevés kilométriques</CardDescription>
+            <CardTitle>Historique des Kilométrages</CardTitle>
+            <CardDescription>Liste de tous les enregistrements</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Véhicule</TableHead>
-                  <TableHead>Kilométrage</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead>Commentaire</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead className="text-primary">ID</TableHead>
+                  <TableHead className="text-primary">Véhicule</TableHead>
+                  <TableHead className="text-primary">Kilométrage</TableHead>
+                  <TableHead className="text-primary">Date</TableHead>
+                  <TableHead className="text-primary">Source</TableHead>
+                  <TableHead className="text-primary">Commentaire</TableHead>
+                  {/* <TableHead>Actions</TableHead> */} {/* Actions non définies pour l'instant */} 
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   // Loading skeleton rows
                   Array(5).fill(0).map((_, index) => (
-                    <TableRow key={`skeleton-${index}`}>
-                      <TableCell><Skeleton className="h-6 w-10" /></TableCell>
-                      <TableCell><Skeleton className="h-6 w-24" /></TableCell>
-                      <TableCell><Skeleton className="h-6 w-20" /></TableCell>
-                      <TableCell><Skeleton className="h-6 w-24" /></TableCell>
-                      <TableCell><Skeleton className="h-6 w-16" /></TableCell>
-                      <TableCell><Skeleton className="h-6 w-32" /></TableCell>
-                      <TableCell><Skeleton className="h-8 w-16" /></TableCell>
+                    <TableRow key={`skeleton-${index}`} className="hover:bg-accent">
+                      <TableCell><Skeleton className="h-6 w-8 bg-accent" /></TableCell>
+                      <TableCell><Skeleton className="h-6 w-24 bg-accent" /></TableCell>
+                      <TableCell><Skeleton className="h-6 w-16 bg-accent" /></TableCell>
+                      <TableCell><Skeleton className="h-6 w-20 bg-accent" /></TableCell>
+                      <TableCell><Skeleton className="h-6 w-12 bg-accent" /></TableCell>
+                      <TableCell><Skeleton className="h-6 w-32 bg-accent" /></TableCell>
+                      {/* <TableCell><Skeleton className="h-8 w-16 bg-accent" /></TableCell> */} 
                     </TableRow>
                   ))
-                ) : mileageRecords.length > 0 ? (
-                  // Display mileage records
-                  mileageRecords.map((record) => (
-                    <TableRow key={record.id}>
-                      <TableCell>{record.id}</TableCell>
+                ) : filteredRecords.length > 0 ? (
+                  // Display filtered mileage records
+                  filteredRecords.map((record) => (
+                    <TableRow key={record.id} className="hover:bg-accent">
+                      <TableCell className="font-medium">{record.id}</TableCell>
                       <TableCell>
-                        {getMileageField(record, ['vehicule_immatriculation', 'vehicle_license_plate'])}
+                        {(() => {
+                          // Cherche la plaque via mapping si possible
+                          const id = getMileageField(record, ['vehicule_id', 'vehicle_id', 'vehicle']);
+                          if (typeof id === 'number' && vehicleMap[id]) return vehicleMap[id];
+                          if (typeof id === 'string' && vehicleMap[parseInt(id)]) return vehicleMap[parseInt(id)];
+                          // Sinon fallback sur les champs texte
+                          return getMileageField(record, ['vehicule_immatriculation', 'vehicle_license_plate', 'vehicle']);
+                        })()}
+                      </TableCell>
+                      <TableCell className="font-semibold">
+                        {formatNumber(getMileageField(record, ['kilometrage', 'mileage'], '0'))} km
                       </TableCell>
                       <TableCell>
-                        {formatNumber(getMileageField(record, ['kilometrage', 'mileage']))} km
+                        {(() => {
+                          const dateValue = getMileageField(record, ['recorded_at', 'date', 'created_at'], '');
+                          return <TableCell>{dateValue ? formatDate(dateValue) : '-'}</TableCell>;
+                        })()}
                       </TableCell>
                       <TableCell>
-                        {getMileageField(record, ['date', 'created_at'])}
+                        {(() => {
+                          const badgeClass =
+                            "px-2 py-0.5 rounded-full text-xs font-medium " +
+                            (getMileageField(record, ['source']) === 'client'
+                              ? 'bg-primary/10 text-primary'
+                              : 'bg-secondary/10 text-secondary-foreground');
+                          return (
+                            <span className={badgeClass}>
+                              {getMileageField(record, ['source'], 'N/A').toUpperCase()}
+                            </span>
+                          );
+                        })()}
                       </TableCell>
-                      <TableCell>
-                        {getMileageField(record, ['source']) === 'client' ? 'Client' : 'Admin'}
-                      </TableCell>
-                      <TableCell>
-                        {getMileageField(record, ['commentaire', 'comment'])}
-                      </TableCell>
-                      <TableCell>
-                        <Button variant="outline" size="sm">Détails</Button>
-                      </TableCell>
+                      <TableCell>{getMileageField(record, ['commentaire', 'comment'])}</TableCell>
+                      {/* <TableCell> Actions placeholder </TableCell> */}
                     </TableRow>
                   ))
                 ) : (
                   // No records
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
+                    <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
                       Aucun enregistrement de kilométrage trouvé
                     </TableCell>
                   </TableRow>
@@ -273,6 +346,9 @@ const SuiviKilometrique = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* TODO: Add Mileage Modal */}
+
     </div>
   );
 };

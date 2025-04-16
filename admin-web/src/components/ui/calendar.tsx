@@ -1,73 +1,103 @@
 import * as React from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
-import { DayPicker } from "react-day-picker"
+import { DatePicker, DateInput, DateSegment, Button, Group, Popover, Dialog, Calendar, CalendarGrid, CalendarCell, Heading, Label } from "react-aria-components"
+import { getLocalTimeZone, today } from "@internationalized/date"
 
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
 
-function Calendar({
+// API simplifiée : value (Date), onChange (Date), range (booléen), placeholder, className
+export function Calendar({
+  value,
+  onChange,
+  range = false,
+  placeholder = "Choisir une date",
   className,
-  classNames,
-  showOutsideDays = true,
   ...props
-}: React.ComponentProps<typeof DayPicker>) {
+}: {
+  value?: Date | { start: Date; end: Date }
+  onChange?: (date: Date | { start: Date; end: Date }) => void
+  range?: boolean
+  placeholder?: string
+  className?: string
+}) {
+  // Conversion Date JS <-> DateValue (React Aria)
+  const toDateValue = (date: Date | null) =>
+    date
+      ? {
+          year: date.getFullYear(),
+          month: date.getMonth() + 1,
+          day: date.getDate(),
+        }
+      : undefined
+  const fromDateValue = (dateValue: any) =>
+    dateValue && dateValue.year
+      ? new Date(dateValue.year, dateValue.month - 1, dateValue.day)
+      : null
+
+  // Support single/range
+  const [selected, setSelected] = React.useState<any>(
+    value
+      ? range
+        ? {
+            start: toDateValue((value as any).start),
+            end: toDateValue((value as any).end),
+          }
+        : toDateValue(value as Date)
+      : undefined
+  )
+
+  React.useEffect(() => {
+    if (onChange) {
+      if (range && selected?.start && selected?.end) {
+        onChange({
+          start: fromDateValue(selected.start),
+          end: fromDateValue(selected.end),
+        })
+      } else if (!range && selected) {
+        onChange(fromDateValue(selected))
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected])
+
   return (
-    <DayPicker
-      showOutsideDays={showOutsideDays}
-      className={cn("p-3", className)}
-      classNames={{
-        months: "flex flex-col sm:flex-row gap-2",
-        month: "flex flex-col gap-4",
-        caption: "flex justify-center pt-1 relative items-center w-full",
-        caption_label: "text-sm font-medium",
-        nav: "flex items-center gap-1",
-        nav_button: cn(
-          buttonVariants({ variant: "outline" }),
-          "size-7 bg-transparent p-0 opacity-50 hover:opacity-100"
-        ),
-        nav_button_previous: "absolute left-1",
-        nav_button_next: "absolute right-1",
-        table: "w-full border-collapse space-x-1",
-        head_row: "flex",
-        head_cell:
-          "text-muted-foreground rounded-md w-8 font-normal text-[0.8rem]",
-        row: "flex w-full mt-2",
-        cell: cn(
-          "relative p-0 text-center text-sm focus-within:relative focus-within:z-20 [&:has([aria-selected])]:bg-accent [&:has([aria-selected].day-range-end)]:rounded-r-md",
-          props.mode === "range"
-            ? "[&:has(>.day-range-end)]:rounded-r-md [&:has(>.day-range-start)]:rounded-l-md first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md"
-            : "[&:has([aria-selected])]:rounded-md"
-        ),
-        day: cn(
-          buttonVariants({ variant: "ghost" }),
-          "size-8 p-0 font-normal aria-selected:opacity-100"
-        ),
-        day_range_start:
-          "day-range-start aria-selected:bg-primary aria-selected:text-primary-foreground",
-        day_range_end:
-          "day-range-end aria-selected:bg-primary aria-selected:text-primary-foreground",
-        day_selected:
-          "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
-        day_today: "bg-accent text-accent-foreground",
-        day_outside:
-          "day-outside text-muted-foreground aria-selected:text-muted-foreground",
-        day_disabled: "text-muted-foreground opacity-50",
-        day_range_middle:
-          "aria-selected:bg-accent aria-selected:text-accent-foreground",
-        day_hidden: "invisible",
-        ...classNames,
-      }}
-      components={{
-        IconLeft: ({ className, ...props }) => (
-          <ChevronLeft className={cn("size-4", className)} {...props} />
-        ),
-        IconRight: ({ className, ...props }) => (
-          <ChevronRight className={cn("size-4", className)} {...props} />
-        ),
-      }}
+    <DatePicker
+      value={selected}
+      onChange={setSelected}
+      granularity="day"
+      locale="fr-FR"
+      isDateUnavailable={() => false}
+      className={cn("w-full", className)}
       {...props}
-    />
+    >
+      <Label className="mb-1 text-sm font-medium">{placeholder}</Label>
+      <Group className="flex items-center gap-2 border rounded-lg px-2 py-1 bg-background">
+        <DateInput className="flex gap-1">
+          {(segment) => <DateSegment segment={segment} className="px-1" />}
+        </DateInput>
+        <Button className="p-1 rounded hover:bg-accent" aria-label="Ouvrir le calendrier">
+          <ChevronRight className="w-4 h-4" />
+        </Button>
+      </Group>
+      <Popover className="z-50">
+        <Dialog className="bg-background rounded-lg shadow p-4">
+          <Calendar className="w-full">
+            <header className="flex items-center justify-between mb-2">
+              <Button slot="previous" className="p-1 rounded hover:bg-accent">
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <Heading className="font-semibold text-primary" />
+              <Button slot="next" className="p-1 rounded hover:bg-accent">
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </header>
+            <CalendarGrid>
+              {(date) => <CalendarCell date={date} className="rounded hover:bg-accent aria-selected:bg-primary aria-selected:text-white" />}
+            </CalendarGrid>
+          </Calendar>
+        </Dialog>
+      </Popover>
+    </DatePicker>
   )
 }
-
-export { Calendar }

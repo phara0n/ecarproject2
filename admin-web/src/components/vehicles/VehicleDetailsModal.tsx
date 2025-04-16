@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from '@/components/ui/dialog';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { AlertCircle, X, RefreshCcw, UserRound, Phone, Mail, Edit, Save } from 'lucide-react';
@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 interface CustomerDetails {
   id: number;
@@ -67,6 +68,7 @@ export const VehicleDetailsModal: React.FC<VehicleDetailsModalProps> = ({
   
   // Reference to the close button for focus management
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const navigate = useNavigate();
 
   // Effect to set focus when modal opens
   useEffect(() => {
@@ -136,7 +138,10 @@ export const VehicleDetailsModal: React.FC<VehicleDetailsModalProps> = ({
       }
 
       if (!response.ok) {
-        console.log(`[VehicleDetailsModal] Customer profile endpoint failed with status: ${response.status}`);
+        if (response.status === 401) {
+          navigate('/login');
+          return;
+        }
         throw new Error(`Erreur lors de la récupération du profil client: ${response.statusText}`);
       }
 
@@ -165,8 +170,18 @@ export const VehicleDetailsModal: React.FC<VehicleDetailsModalProps> = ({
       // Update customer details with the new information
       setCustomerDetails(userData);
       
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(`[VehicleDetailsModal] Error fetching customer profile:`, err);
+      if (
+        (err instanceof Error && (
+          err.message.includes('Authentification requise') ||
+          err.message.includes('session expirée') ||
+          err.message.includes('token_not_valid')
+        ))
+      ) {
+        navigate('/login');
+        return;
+      }
       setCustomerError(err instanceof Error ? err.message : 'Une erreur est survenue lors de la récupération du profil');
     } finally {
       setIsLoadingCustomer(false);
@@ -196,6 +211,10 @@ export const VehicleDetailsModal: React.FC<VehicleDetailsModalProps> = ({
       }
 
       if (!response.ok) {
+        if (response.status === 401) {
+          navigate('/login');
+          return;
+        }
         throw new Error(`Erreur lors de la récupération des détails du client: ${response.statusText}`);
       }
 
@@ -229,8 +248,18 @@ export const VehicleDetailsModal: React.FC<VehicleDetailsModalProps> = ({
       }
       
       setCustomerDetails(userData);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(`[VehicleDetailsModal] Error fetching customer details:`, err);
+      if (
+        (err instanceof Error && (
+          err.message.includes('Authentification requise') ||
+          err.message.includes('session expirée') ||
+          err.message.includes('token_not_valid')
+        ))
+      ) {
+        navigate('/login');
+        return;
+      }
       setCustomerError(err instanceof Error ? err.message : 'Une erreur est survenue');
     } finally {
       setIsLoadingCustomer(false);
@@ -318,10 +347,24 @@ export const VehicleDetailsModal: React.FC<VehicleDetailsModalProps> = ({
         setIsEditMode(false);
         setEditedVehicle(null);
       } else {
+        if (response.status === 401) {
+          navigate('/login');
+          return;
+        }
         throw new Error(`Erreur ${response.status}: ${response.statusText}`);
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('[VehicleDetailsModal] Error saving vehicle:', err);
+      if (
+        (err instanceof Error && (
+          err.message.includes('Authentification requise') ||
+          err.message.includes('session expirée') ||
+          err.message.includes('token_not_valid')
+        ))
+      ) {
+        navigate('/login');
+        return;
+      }
       toast.error('Erreur', {
         description: err instanceof Error ? err.message : "Une erreur s'est produite lors de la sauvegarde.",
       });

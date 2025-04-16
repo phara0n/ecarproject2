@@ -336,15 +336,15 @@ const FacturesPage = () => {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 bg-background text-primary min-h-screen">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Gestion des Factures</h1>
+        <h1 className="text-3xl font-bold text-primary">Gestion des Factures</h1>
         <div className="flex space-x-2">
-          <Button variant="outline" onClick={fetchInvoices} disabled={isLoading}>
+          <Button className="bg-muted text-primary hover:bg-accent rounded-lg border-none shadow-sm" onClick={fetchInvoices} disabled={isLoading} type="button">
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Actualiser
           </Button>
-          <Button onClick={() => setIsAddInvoiceOpen(true)}>
+          <Button className="bg-primary text-white hover:bg-primary/80 rounded-lg shadow" onClick={() => setIsAddInvoiceOpen(true)} type="button">
             <PlusIcon className="w-4 h-4 mr-2" />
             Nouvelle Facture
           </Button>
@@ -353,7 +353,7 @@ const FacturesPage = () => {
 
       {/* Error display */}
       {error && (
-        <Alert variant="destructive" className="my-4">
+        <Alert variant="destructive" className="my-4 bg-destructive/10 border-destructive text-destructive rounded-lg">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Erreur</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
@@ -363,10 +363,10 @@ const FacturesPage = () => {
       <div className="grid grid-cols-1 gap-6">
         {/* Overview cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card>
+          <Card className="bg-muted text-primary rounded-lg shadow">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Total Factures</CardTitle>
-              <CardDescription>Nombre</CardDescription>
+              <CardDescription>Nombre total d'enregistrements</CardDescription>
             </CardHeader>
             <CardContent>
               {isLoading ? (
@@ -376,7 +376,7 @@ const FacturesPage = () => {
               )}
             </CardContent>
           </Card>
-          <Card>
+          <Card className="bg-muted text-primary rounded-lg shadow">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Montant Total</CardTitle>
               <CardDescription>Toutes factures</CardDescription>
@@ -391,7 +391,7 @@ const FacturesPage = () => {
               )}
             </CardContent>
           </Card>
-          <Card>
+          <Card className="bg-muted text-primary rounded-lg shadow">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Montant Moyen</CardTitle>
               <CardDescription>Par facture</CardDescription>
@@ -409,7 +409,7 @@ const FacturesPage = () => {
         </div>
 
         {/* Invoices table */}
-        <Card>
+        <Card className="bg-muted text-primary rounded-lg shadow">
           <CardHeader>
             <CardTitle>Factures</CardTitle>
             <CardDescription>Gérez vos factures de services</CardDescription>
@@ -418,73 +418,52 @@ const FacturesPage = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Véhicule</TableHead>
-                  <TableHead>Service</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Montant</TableHead>
-                  <TableHead>Fichier</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead className="text-primary">ID</TableHead>
+                  <TableHead className="text-primary">Véhicule</TableHead>
+                  <TableHead className="text-primary">Date Facture</TableHead>
+                  <TableHead className="text-primary">Montant (DT)</TableHead>
+                  <TableHead className="text-primary">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   // Loading skeleton rows
                   Array(5).fill(0).map((_, index) => (
-                    <TableRow key={`skeleton-${index}`}>
-                      <TableCell><Skeleton className="h-6 w-10" /></TableCell>
-                      <TableCell><Skeleton className="h-6 w-24" /></TableCell>
-                      <TableCell><Skeleton className="h-6 w-16" /></TableCell>
-                      <TableCell><Skeleton className="h-6 w-24" /></TableCell>
-                      <TableCell><Skeleton className="h-6 w-20" /></TableCell>
-                      <TableCell><Skeleton className="h-6 w-16" /></TableCell>
-                      <TableCell><Skeleton className="h-8 w-16" /></TableCell>
+                    <TableRow key={`skeleton-${index}`} className="hover:bg-accent">
+                      <TableCell><Skeleton className="h-6 w-8 bg-accent" /></TableCell>
+                      <TableCell><Skeleton className="h-6 w-24 bg-accent" /></TableCell>
+                      <TableCell><Skeleton className="h-6 w-20 bg-accent" /></TableCell>
+                      <TableCell><Skeleton className="h-6 w-16 bg-accent" /></TableCell>
+                      <TableCell><Skeleton className="h-8 w-16 bg-accent" /></TableCell>
                     </TableRow>
                   ))
                 ) : invoices.length > 0 ? (
                   // Display invoices
                   invoices.map((invoice) => (
-                    <TableRow key={invoice.id}>
-                      <TableCell>{invoice.id}</TableCell>
+                    <TableRow key={invoice.id} className="hover:bg-accent">
+                      <TableCell className="font-medium">{invoice.id}</TableCell>
                       <TableCell>
-                        {invoice.vehicle_info?.registration_number || 
-                         getInvoiceField(invoice, ['vehicule_immatriculation', 'vehicle_license_plate'])}
+                        {getInvoiceField(invoice, ['vehicle_info.registration_number', 'vehicule_immatriculation', 'vehicle_license_plate'])}
+                      </TableCell>
+                      <TableCell>{formatDate(getInvoiceField(invoice, ['invoice_date']))}</TableCell>
+                      <TableCell className="font-semibold">
+                        {formatCurrency(getInvoiceField(invoice, ['final_amount', 'montant', 'amount'], '0'))} DT
                       </TableCell>
                       <TableCell>
-                        {getInvoiceField(invoice, ['evenement_service_id', 'service_event_id'])}
-                      </TableCell>
-                      <TableCell>
-                        {formatDate(getInvoiceField(invoice, ['invoice_date', 'date_creation', 'created_at', 'uploaded_at']))}
-                      </TableCell>
-                      <TableCell>
-                        {formatCurrency(getInvoiceField(invoice, ['final_amount', 'montant', 'amount']))}
-                      </TableCell>
-                      <TableCell>
-                        {getInvoiceField(invoice, ['pdf_file', 'fichier', 'file']) !== '-' ? (
-                          <div className="flex items-center">
-                            <FileIcon className="h-4 w-4 mr-1" />
-                            PDF
-                          </div>
-                        ) : (
-                          '-'
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => downloadInvoice(invoice)}
-                          disabled={getInvoiceField(invoice, ['pdf_file', 'fichier', 'file']) === '-'}
-                        >
-                          <DownloadIcon className="h-4 w-4" />
-                          <span className="sr-only">Télécharger</span>
+                        <Button size="icon" variant="outline" className="bg-muted text-primary hover:bg-accent rounded-lg mr-1" onClick={() => downloadInvoice(invoice)} title="Télécharger">
+                          <DownloadIcon className="w-4 h-4" />
+                        </Button>
+                        {/* Delete button (to implement) */}
+                        <Button size="icon" variant="destructive" className="bg-destructive text-white hover:bg-destructive/80 rounded-lg" title="Supprimer">
+                          <XIcon className="w-4 h-4" />
                         </Button>
                       </TableCell>
                     </TableRow>
                   ))
                 ) : (
+                  // No invoices
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
+                    <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
                       Aucune facture trouvée
                     </TableCell>
                   </TableRow>
@@ -495,159 +474,113 @@ const FacturesPage = () => {
         </Card>
       </div>
 
-      {/* Add Invoice Dialog */}
+      {/* Add Invoice Modal */}
       <Dialog open={isAddInvoiceOpen} onOpenChange={setIsAddInvoiceOpen}>
-        <DialogContent className="sm:max-w-[525px]">
+        <DialogContent className="sm:max-w-[480px] bg-background text-primary rounded-lg shadow-lg">
           <DialogHeader>
-            <DialogTitle>Ajouter une Nouvelle Facture</DialogTitle>
-            <DialogDescription>
-              Ajoutez une nouvelle facture PDF pour un véhicule.
-            </DialogDescription>
+            <DialogTitle>Nouvelle Facture</DialogTitle>
+            <DialogDescription>Ajouter une nouvelle facture PDF.</DialogDescription>
           </DialogHeader>
-          
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="grid gap-4 py-4">
+            {/* Vehicle Select */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="vehicle" className="text-right">Véhicule</Label>
+              <Select onValueChange={setSelectedVehicle} value={selectedVehicle || ''} disabled={isVehiclesLoading}>
+                <SelectTrigger id="vehicle" className="col-span-3 bg-muted rounded-lg focus:ring-primary">
+                  <SelectValue placeholder={isVehiclesLoading ? 'Chargement...' : 'Sélectionner...'} />
+                </SelectTrigger>
+                <SelectContent className="bg-muted text-primary rounded-lg">
+                  {vehicles.map((v) => (
+                    <SelectItem key={v.id} value={v.id.toString()} className="hover:bg-accent">
+                      {v.registration_number} ({v.make} {v.model})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Service Event Select (optional) */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="service" className="text-right">Service lié</Label>
+              <Select 
+                onValueChange={setSelectedService} 
+                value={selectedService || ''} 
+                disabled={!selectedVehicle || isServicesLoading}
+              >
+                <SelectTrigger id="service" className="col-span-3 bg-muted rounded-lg focus:ring-primary">
+                  <SelectValue placeholder={!selectedVehicle ? 'Choisir véhicule d\'abord' : isServicesLoading ? 'Chargement...' : 'Sélectionner service (optionnel)'} />
+                </SelectTrigger>
+                <SelectContent className="bg-muted text-primary rounded-lg">
+                  <SelectItem value="" className="hover:bg-accent">Aucun service spécifique</SelectItem>
+                  {services.map((s) => (
+                    <SelectItem key={s.id} value={s.id.toString()} className="hover:bg-accent">
+                      {s.service_type_info.name} - {formatDate(s.event_date)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Separator className="bg-border" />
+
+            {/* Amount Input */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="amount" className="text-right">Montant (DT)</Label>
+              <Input 
+                id="amount" 
+                type="number" 
+                step="0.01" 
+                value={amount} 
+                onChange={(e) => setAmount(e.target.value)} 
+                className="col-span-3 bg-muted rounded-lg focus:ring-primary" 
+                required 
+              />
+            </div>
+
+            {/* Invoice Date Input */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="invoice-date" className="text-right">Date Facture</Label>
+              <Input 
+                id="invoice-date" 
+                type="date" 
+                value={invoiceDate} 
+                onChange={(e) => setInvoiceDate(e.target.value)} 
+                className="col-span-3 bg-muted rounded-lg focus:ring-primary" 
+                required 
+              />
+            </div>
+
+            {/* File Input */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="pdf-file" className="text-right">Fichier PDF</Label>
+              <Input 
+                id="pdf-file" 
+                type="file" 
+                accept=".pdf" 
+                ref={fileInputRef} 
+                className="col-span-3 bg-muted rounded-lg focus:ring-primary file:bg-primary file:text-white file:rounded-lg file:border-none file:px-2 file:py-1 file:mr-2 hover:file:bg-primary/80 cursor-pointer" 
+                required 
+              />
+            </div>
+
             {submitError && (
-              <Alert variant="destructive">
+              <Alert variant="destructive" className="col-span-4 bg-destructive/10 border-destructive text-destructive rounded-lg">
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Erreur</AlertTitle>
                 <AlertDescription>{submitError}</AlertDescription>
               </Alert>
             )}
-            
-            <div className="grid gap-4 py-4">
-              {/* Vehicle Selection */}
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="vehicle" className="text-right">
-                  Véhicule*
-                </Label>
-                <div className="col-span-3">
-                  <Select
-                    value={selectedVehicle || ''}
-                    onValueChange={setSelectedVehicle}
-                    disabled={isVehiclesLoading}
-                  >
-                    <SelectTrigger id="vehicle">
-                      <SelectValue placeholder="Sélectionner un véhicule" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {isVehiclesLoading ? (
-                        <SelectItem value="loading" disabled>
-                          Chargement...
-                        </SelectItem>
-                      ) : vehicles.length > 0 ? (
-                        vehicles.map((vehicle) => (
-                          <SelectItem key={vehicle.id} value={vehicle.id.toString()}>
-                            {vehicle.registration_number} - {vehicle.make} {vehicle.model}
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <SelectItem value="empty" disabled>
-                          Aucun véhicule disponible
-                        </SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              
-              {/* Service Selection (Optional) */}
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="service" className="text-right">
-                  Service
-                </Label>
-                <div className="col-span-3">
-                  <Select
-                    value={selectedService || ''}
-                    onValueChange={setSelectedService}
-                    disabled={isServicesLoading || !selectedVehicle}
-                  >
-                    <SelectTrigger id="service">
-                      <SelectValue placeholder="Sélectionner un service (optionnel)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {isServicesLoading ? (
-                        <SelectItem value="loading" disabled>
-                          Chargement...
-                        </SelectItem>
-                      ) : services.length > 0 ? (
-                        services.map((service) => (
-                          <SelectItem key={service.id} value={service.id.toString()}>
-                            {service.service_type_info.name} ({formatDate(service.event_date)})
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <SelectItem value="empty" disabled>
-                          {selectedVehicle ? "Aucun service pour ce véhicule" : "Sélectionnez d'abord un véhicule"}
-                        </SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              
-              {/* Amount */}
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="amount" className="text-right">
-                  Montant (DT)*
-                </Label>
-                <div className="col-span-3">
-                  <Input
-                    id="amount"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0.00"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                  />
-                </div>
-              </div>
-              
-              {/* Invoice Date */}
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="date" className="text-right">
-                  Date*
-                </Label>
-                <div className="col-span-3">
-                  <Input
-                    id="date"
-                    type="date"
-                    value={invoiceDate}
-                    onChange={(e) => setInvoiceDate(e.target.value)}
-                  />
-                </div>
-              </div>
-              
-              {/* File Upload */}
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="file" className="text-right">
-                  Fichier PDF*
-                </Label>
-                <div className="col-span-3">
-                  <Input
-                    id="file"
-                    type="file"
-                    accept=".pdf"
-                    ref={fileInputRef}
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-            
-            <Separator />
-            
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button type="button" variant="outline">
-                  Annuler
-                </Button>
-              </DialogClose>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Envoi en cours..." : "Ajouter la facture"}
-              </Button>
-            </DialogFooter>
           </form>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline" className="bg-muted text-primary hover:bg-accent rounded-lg">
+                Annuler
+              </Button>
+            </DialogClose>
+            <Button type="submit" onClick={handleSubmit} disabled={isSubmitting} className="bg-primary text-white hover:bg-primary/80 rounded-lg">
+              {isSubmitting ? 'Ajout...' : 'Ajouter Facture'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

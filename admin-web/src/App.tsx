@@ -10,7 +10,7 @@ import LoginPage from '@/pages/LoginPage';
 import DashboardPage from '@/pages/DashboardPage';
 import VehiclesPage from '@/pages/VehiclesPage';
 import ServicesPage from '@/pages/ServicesPage';
-import CustomersPage from '@/pages/CustomersPage';
+import ClientPage from '@/pages/client/ClientPage';
 import FacturesPage from '@/pages/FacturesPage';
 import SuiviKilometrique from '@/pages/SuiviKilometrique';
 import SettingsPage from '@/pages/SettingsPage';
@@ -75,7 +75,7 @@ function AppRoutes() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/vehicles" element={<VehiclesPage />} />
         <Route path="/services" element={<ServicesPage />} />
-        <Route path="/customers" element={<CustomersPage />} />
+        <Route path="/customers" element={<ClientPage />} />
         <Route path="/factures" element={<FacturesPage />} />
         <Route path="/mileage" element={<SuiviKilometrique />} />
         <Route path="/settings" element={<SettingsPage />} />

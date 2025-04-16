@@ -26,16 +26,14 @@ const DashboardPage = () => {
   ];
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold text-foreground">Tableau de Bord</h1>
+    <div className="space-y-6 p-6 bg-background text-primary min-h-screen">
+      <h1 className="text-2xl font-bold text-primary">Tableau de Bord</h1>
       
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card className="bg-muted rounded-lg shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Véhicules
-            </CardTitle>
-            <Car className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-primary">Total Véhicules</CardTitle>
+            <Car className="h-4 w-4 text-primary/80" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">1,234</div>
@@ -45,12 +43,10 @@ const DashboardPage = () => {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-muted rounded-lg shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Services en Attente
-            </CardTitle>
-            <Wrench className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-primary">Services en Attente</CardTitle>
+            <Wrench className="h-4 w-4 text-primary/80" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">+56</div>
@@ -60,10 +56,10 @@ const DashboardPage = () => {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-muted rounded-lg shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Clients Actifs</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-primary">Clients Actifs</CardTitle>
+            <Users className="h-4 w-4 text-primary/80" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">+89</div>
@@ -73,10 +69,10 @@ const DashboardPage = () => {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-muted rounded-lg shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Prochains RDV</CardTitle>
-            <CalendarDays className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-primary">Prochains RDV</CardTitle>
+            <CalendarDays className="h-4 w-4 text-primary/80" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">15</div>
@@ -90,25 +86,25 @@ const DashboardPage = () => {
       {/* Main Content Area - Charts and Recent Activity */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
         {/* Chart Area (Placeholder) */}
-        <Card className="lg:col-span-4">
+        <Card className="lg:col-span-4 bg-muted rounded-lg shadow">
           <CardHeader>
-            <CardTitle>Statistiques Visuelles (Placeholder)</CardTitle>
+            <CardTitle className="text-primary">Statistiques Visuelles (Placeholder)</CardTitle>
             <CardDescription>
               Graphiques des services, kilométrage moyen, etc.
             </CardDescription>
           </CardHeader>
           <CardContent className="pl-2">
              {/* Chart component will go here - e.g., <BarChart ... /> */}
-             <div className="h-64 flex items-center justify-center text-muted-foreground bg-muted/40 rounded-md">
+             <div className="h-64 flex items-center justify-center text-primary/60 bg-background rounded-md">
                (Graphique)
              </div>
           </CardContent>
         </Card>
 
         {/* Recent Activity Table */}
-        <Card className="lg:col-span-3">
+        <Card className="lg:col-span-3 bg-muted rounded-lg shadow">
           <CardHeader>
-            <CardTitle>Activité Récente</CardTitle>
+            <CardTitle className="text-primary">Activité Récente</CardTitle>
             <CardDescription>
               Dernières actions enregistrées dans le système.
             </CardDescription>
@@ -118,20 +114,20 @@ const DashboardPage = () => {
               {/* Optional: <TableCaption>Liste des activités récentes.</TableCaption> */}
               <TableHeader>
                 <TableRow>
-                  <TableHead>Description</TableHead>
-                  <TableHead className="text-right">Temps</TableHead>
+                  <TableHead className="text-primary">Description</TableHead>
+                  <TableHead className="text-right text-primary">Temps</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {recentActivities.map((activity) => (
-                  <TableRow key={activity.id}>
+                  <TableRow key={activity.id} className="hover:bg-accent">
                     <TableCell>
                       <div className="font-medium">{activity.description}</div>
                       <div className="hidden text-sm text-muted-foreground md:inline">
                         par {activity.user}
                       </div>
                     </TableCell>
-                    <TableCell className="text-right">{activity.time}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{activity.time}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

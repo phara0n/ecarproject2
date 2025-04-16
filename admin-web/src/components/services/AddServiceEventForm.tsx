@@ -39,6 +39,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useAuth } from "@/context/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 // Form schema validation
 const serviceEventSchema = z.object({
@@ -106,6 +107,7 @@ export function AddServiceEventForm({
   onAdd 
 }: AddServiceEventFormProps) {
   const { authAxios } = useAuth();
+  const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tempSelectedVehicle, setTempSelectedVehicle] = useState<string>("");
   const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([]);
@@ -148,12 +150,15 @@ export function AddServiceEventForm({
       try {
         console.log("[AddServiceEventForm] Fetching service types...");
         const response = await authAxios.get("api/v1/service-types/");
-        console.log("[AddServiceEventForm] Service types API response:", response.data);
-        console.log("[AddServiceEventForm] Response type:", typeof response.data, Array.isArray(response.data));
+        const data = response.data;
+        // Gestion du cas token expiré ou invalide
+        if (data && data.error && data.error.code === 'token_not_valid') {
+          setServiceTypesError("Session expirée, veuillez vous reconnecter.");
+          setServiceTypes([]);
+          return;
+        }
         
         // Ensure serviceTypes is always an array
-        const data = response.data;
-        
         if (Array.isArray(data)) {
           console.log("[AddServiceEventForm] Setting serviceTypes from direct array");
           setServiceTypes(data.map(normalizeServiceType));
@@ -324,6 +329,16 @@ export function AddServiceEventForm({
         toast.error("Erreur", {
           description: errorMsg,
         });
+
+        // Gestion de l'erreur d'authentification
+        if (
+          error.response &&
+          (error.response.status === 401 ||
+            (typeof error.response.data === 'string' && error.response.data.includes('Authentification requise')))
+        ) {
+          navigate('/login');
+          return;
+        }
       }
     } catch (error) {
       // Handle unexpected errors in the form submission process itself
@@ -578,12 +593,12 @@ export function AddServiceEventForm({
                       align="start"
                     >
                       <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        initialFocus
-                        disabled={(date) => date < new Date("1900-01-01")} // Disable implausible past dates
+                        value={field.value}
+                        onChange={field.onChange}
+                        placeholder="Choisir une date"
+                        range={false}
                         className="text-popover-foreground text-force-white"
+                        {...(date => date < new Date("1900-01-01") ? { isDateUnavailable: () => true } : {})}
                       />
                     </PopoverContent>
                   </Popover>

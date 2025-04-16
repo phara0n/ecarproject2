@@ -51,7 +51,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const refreshToken = useCallback(async (): Promise<string | null> => {
     console.log("AuthProvider: refreshToken called");
-    
     // Too many attempts, log out
     if (authAttempts >= MAX_AUTH_RETRIES) {
       console.error("AuthProvider: Max auth retries exceeded, logging out");
@@ -59,47 +58,43 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setAuthAttempts(0);
       return null;
     }
-
     const currentRefreshToken = localStorage.getItem('refreshToken');
     if (!currentRefreshToken) {
       console.error("AuthProvider: No refresh token available, logging out");
       logout(true);
       return null;
     }
-
     try {
-      // Create a base URL for the refresh request
       const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-      
       const response = await ky.post(`${baseURL}/api/v1/auth/refresh/`, {
         json: {
           refresh: currentRefreshToken
         },
         credentials: 'include'
       }).json();
-
       const { access, refresh } = response as { access: string; refresh: string };
-      
-      // Store tokens
       localStorage.setItem('authToken', access);
       localStorage.setItem('refreshToken', refresh);
       setToken(access);
       setRefreshTokenValue(refresh);
       setAuthAttempts(0); // Reset auth attempts on success
-      
-      // Update authenticated state if we don't already have it
       if (!isAuthenticated) {
         setIsAuthenticated(true);
       }
-
       console.log("AuthProvider: Token refreshed successfully");
       return access;
-    } catch (error) {
-      console.error("AuthProvider: Error refreshing token:", error);
+    } catch (error: any) {
+      // Correction : si 404 ou 401 sur le refresh, logout direct et stop boucle
+      if (error.response && (error.response.status === 401 || error.response.status === 404)) {
+        console.error("AuthProvider: Refresh endpoint failed (", error.response.status, "), logging out and stopping retry loop.");
+        logout(false);
+        setAuthAttempts(0);
+        return null;
+      }
       setAuthAttempts(prev => prev + 1);
       return null;
     }
-  }, [logout, MAX_AUTH_RETRIES]); // Remove isAuthenticated and authAttempts from dependencies
+  }, [logout, MAX_AUTH_RETRIES]);
 
   const fetchUserData = useCallback(async (currentToken?: string) => {
     const token = currentToken || getToken();
@@ -247,7 +242,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       } else if (isMounted) {
         console.log("AuthProvider: Initial check - No auth token found.");
         // Assurer un état propre si aucun token
-        logout(true); // Logout pendant check initial sans arrêter isLoading
+        logout(false); // Logout et navigation immédiate
+        setIsLoading(false); // Terminer l'état de chargement initial ICI
+        setIsInitialCheckRunning(false);
+        return; // Stop further execution
       }
 
       if (isMounted) {
@@ -262,7 +260,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return () => {
       isMounted = false; // Prevent state updates if component unmounts
     };
-  }, []); // Run only once on component mount
+  }, [logout]); // Ajout de logout dans les dépendances pour garantir la navigation
 
   // --- Login ---
   const login = useCallback(async (credentials: { username: string; password: string }) => {

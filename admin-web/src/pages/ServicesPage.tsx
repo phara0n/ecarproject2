@@ -1,230 +1,341 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { AddServiceEventForm } from '@/components/services/AddServiceEventForm';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { PlusCircle, ListFilterIcon, CalendarIcon, AlertCircle, RefreshCw, X } from 'lucide-react';
-import { format } from 'date-fns';
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogDescription,
-  DialogClose
-} from '@/components/ui/dialog';
+import { PlusCircle, AlertCircle, Eye, Edit, Trash2, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from '@/components/ui/dialog';
+import * as z from 'zod';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import ky from 'ky';
 
-// Define the ServiceEvent interface
+// Types de base
 interface ServiceEvent {
   id: number;
-  vehicle_info?: {
-    registration_number: string;
-    make?: string;
-    model?: string;
-  };
-  service_type_info?: {
-    name: string;
-    description?: string;
-  };
-  event_date: string; // Changed from date_scheduled to match serializer
+  vehicle_info?: { registration_number: string; make?: string; model?: string };
+  service_type_info?: { name: string; description?: string };
+  event_date: string;
   status: string; 
-  title?: string; // Keep title for manual overrides or specific names
+  title?: string;
   mileage_at_service?: number;
   notes?: string;
 }
 
-// Interface for Vehicle data
-interface Vehicle {
-  id: number; // Assuming ID is number
-  registration_number: string;
-  make?: string;
-  model?: string;
-}
-
-// Helper function to convert status values to proper display labels
-const getStatusLabel = (status: string | null | undefined): string => {
-  if (!status) return 'Inconnu';
-  
-  // Normalize status to lowercase without spaces, underscores, or dashes for comparison
-  const normalizedStatus = status.toLowerCase().replace(/[\s_-]/g, '');
-  
-  // Map of normalized status values to their display labels
-  const statusMap: Record<string, string> = {
-    'scheduled': 'Planifié',
-    'planifie': 'Planifié',
-    'inprogress': 'En cours',
-    'encours': 'En cours',
-    'completed': 'Terminé',
-    'termine': 'Terminé',
-    'cancelled': 'Annulé',
-    'annule': 'Annulé',
-  };
-  
-  // Return the mapped label or capitalize the original status if no mapping exists
-  return statusMap[normalizedStatus] || status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ');
+const STATUS_LABELS: Record<string, string> = {
+  scheduled: 'Planifié',
+  planifie: 'Planifié',
+  inprogress: 'En cours',
+  encours: 'En cours',
+  completed: 'Terminé',
+  termine: 'Terminé',
+  cancelled: 'Annulé',
+  annule: 'Annulé',
+};
+const STATUS_COLORS: Record<string, string> = {
+  scheduled: 'outline',
+  planifie: 'outline',
+  inprogress: 'secondary',
+  encours: 'secondary',
+  completed: 'default',
+  termine: 'default',
+  cancelled: 'destructive',
+  annule: 'destructive',
 };
 
+const formatDate = (dateStr?: string) => {
+  if (!dateStr) return '-';
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('fr-FR');
+};
+
+const serviceFormSchema = z.object({
+  vehicle: z.string().min(1, 'Véhicule requis'),
+  service_type: z.string().min(1, 'Type requis'),
+  event_date: z.string().min(1, 'Date et heure requises'),
+  mileage: z.string().min(1, 'Kilométrage requis'),
+  notes: z.string().optional(),
+});
+type ServiceFormValues = z.infer<typeof serviceFormSchema>;
+
 const ServicesPage: React.FC = () => {
-  const { authAxios, isLoading: isAuthLoading, isAuthenticated, token } = useAuth();
+  const { token, isLoading: isAuthLoading, isAuthenticated } = useAuth();
+  const api = ky.create({
+    prefixUrl: 'http://localhost:8000/',
+    hooks: {
+      beforeRequest: [
+        request => {
+          if (token) request.headers.set('Authorization', `Bearer ${token}`);
+        }
+      ]
+    }
+  });
   const [isDataLoading, setIsDataLoading] = useState<boolean>(true);
   const [serviceEvents, setServiceEvents] = useState<ServiceEvent[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
-  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('');
   const [selectedEvent, setSelectedEvent] = useState<ServiceEvent | null>(null);
-  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState<boolean>(false);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [mileageRecords, setMileageRecords] = useState<any[]>([]);
+  const [isMileageLoading, setIsMileageLoading] = useState(false);
+  const [mileageError, setMileageError] = useState<string | null>(null);
+  const [vehiclesList, setVehiclesList] = useState<any[]>([]);
+  const [serviceTypes, setServiceTypes] = useState<any[]>([]);
+  const [isFormLoading, setIsFormLoading] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [eventToDelete, setEventToDelete] = useState<ServiceEvent | null>(null);
+  const [isDeleteLoading, setIsDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  // --- Data Fetching Functions ---
-
-  const fetchServiceEvents = async () => {
-    if (!authAxios) return; 
-    console.log("[ServicesPage] Fetching service events...");
-    setIsDataLoading(true);
+  // Fetch services uniquement si authentifié
+  useEffect(() => {
+    if (isAuthLoading) return;
+    if (!isAuthenticated || !token) {
+      setServiceEvents([]);
+      setIsDataLoading(false);
+      return;
+    }
     setError(null);
-    try {
-      // First get the response, then parse the JSON
-      const response = await authAxios.get('api/v1/service-events/');
-      const responseData = await response.json();
-      
-      // Adjust based on actual API response structure
-      const data = responseData?.results || responseData?.data || responseData || [];
-      console.log("[ServicesPage] Service events data received:", data);
-      
-      // Log status values to debug
-      if (Array.isArray(data) && data.length > 0) {
-        console.log("[ServicesPage] Status values in API response:", data.map(event => {
-          return {
-            id: event.id,
-            status: event.status,
-            raw: event
-          };
-        }));
-      }
-      
-      // Map data more accurately based on the serializer structure
-      setServiceEvents(data.map((event: any) => ({
-        id: event.id,
-        vehicle_info: event.vehicle_info || { registration_number: 'N/A' },
-        service_type_info: event.service_type_info || { name: 'Type Inconnu' },
-        event_date: event.event_date, // Use event_date
-        status: event.status || 'inconnu', // Assuming status exists directly
-        title: event.title, // Use title if available
-        mileage_at_service: event.mileage_at_service,
-        notes: event.notes
-      })));
-    } catch (err: any) {
-      console.error("[ServicesPage] Error fetching service events:", err);
-      let errorMessage = "Impossible de charger les événements de service";
-      
-      // Handle Ky errors
-      if (err.response) {
-        try {
-          const errorData = await err.response.json();
-          errorMessage += ": " + (errorData?.detail || errorData?.message || JSON.stringify(errorData));
-        } catch (parseError) {
-          errorMessage += `: Erreur ${err.response.status}`;
-        }
-      } else if (err instanceof Error) {
-        errorMessage += ": " + err.message;
-      }
-      
-      setError(errorMessage);
-      setServiceEvents([]);
-    } finally {
-      setIsDataLoading(false);
-    }
-  };
+    setIsDataLoading(true);
+    api.get('api/v1/service-events/')
+      .json()
+      .then((data: any) => {
+        console.log('Réponse brute API service-events:', data); // LOG DEBUG
+        const results = Array.isArray(data) ? data : data.results || data.data || [];
+        setServiceEvents(results);
+      })
+      .catch((err: any) => {
+        setError("Erreur lors du chargement des interventions. " + (err?.message || ''));
+      })
+      .finally(() => setIsDataLoading(false));
+  }, [isAuthLoading, isAuthenticated, token]);
 
-  const fetchVehicles = async () => {
-    if (!authAxios) return;
-    console.log("[ServicesPage] Fetching vehicles...");
-    try {
-      // First get the response, then parse the JSON
-      const response = await authAxios.get('api/v1/vehicles/');
-      const responseData = await response.json();
-      
-      // Adjust based on actual API response structure
-      const data = responseData?.results || responseData?.data || responseData || [];
-      console.log("[ServicesPage] Vehicles data received:", data);
-      
-      // Map vehicle data more accurately
-      setVehicles(data.map((vehicle: any) => ({
-        id: vehicle.id,
-        registration_number: vehicle.registration_number || 'N/A',
-        make: vehicle.make,
-        model: vehicle.model
-      })));
-    } catch (err: any) {
-      console.error("[ServicesPage] Error fetching vehicles:", err);
-      // We don't show error for vehicles in the UI, but log properly
-      if (err.response) {
-        console.error(`[ServicesPage] Vehicle API Error (${err.response.status})`);
-      } else if (err instanceof Error) {
-        console.error(`[ServicesPage] Vehicle Fetch Error: ${err.message}`);
-      }
-      setVehicles([]);
-    }
-  };
-
-  // --- Effects ---
-
-  // Main effect for fetching data after authentication is confirmed
+  // Fetch mileage records for the selected vehicle when modal opens
   useEffect(() => {
-    console.log(`[ServicesPage Main Effect] Auth Loading: ${isAuthLoading}, Authenticated: ${isAuthenticated}, Token: ${!!token}, AuthAxios: ${!!authAxios}`);
-    if (!isAuthLoading && isAuthenticated && token && authAxios) {
-      console.log("[ServicesPage Main Effect] Conditions met. Fetching initial data...");
-      fetchServiceEvents();
-      fetchVehicles(); // Fetch vehicles needed for the Add form
-    } else if (!isAuthLoading && (!isAuthenticated || !token)) {
-      console.log("[ServicesPage Main Effect] Not authenticated or token missing after load.");
-      setError("Authentification requise ou session expirée.");
-      setIsDataLoading(false);
-      setServiceEvents([]);
-      setVehicles([]);
-    }
-  }, [isAuthLoading, isAuthenticated, token, authAxios]);
+    if (!selectedEvent || !selectedEvent.vehicle_info?.registration_number || !isDetailsModalOpen) return;
+    setIsMileageLoading(true);
+    setMileageError(null);
+    fetch(`/api/v1/mileage-records/?vehicle=${encodeURIComponent(selectedEvent.vehicle_info.registration_number)}`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error('Erreur API');
+        const data = await res.json();
+        setMileageRecords(data.data || data || []);
+      })
+      .catch(() => setMileageError('Erreur lors du chargement du suivi kilométrique.'))
+      .finally(() => setIsMileageLoading(false));
+  }, [selectedEvent, isDetailsModalOpen]);
 
-  // Effect to fetch vehicles when the modal opens (if not already loaded)
+  // Fetch véhicules et types de service à l'ouverture de la modale d'ajout
   useEffect(() => {
-    if (isAddModalOpen && vehicles.length === 0 && !isDataLoading && authAxios && token) {
-      console.log("[ServicesPage Modal Effect] Modal opened, fetching vehicles...");
-      fetchVehicles();
+    if (!isAddModalOpen) return;
+    setIsFormLoading(true);
+    setFormError(null);
+    if (!token) {
+      setFormError("Erreur d'authentification. Veuillez vous reconnecter.");
+      setIsFormLoading(false);
+      return;
     }
-  }, [isAddModalOpen, vehicles.length, isDataLoading, authAxios, token]);
+    Promise.all([
+      api.get('api/v1/vehicles/').json().then(async (data: any) => {
+        const arr = data.data || data || [];
+        return Array.isArray(arr) ? arr : [];
+      }),
+      api.get('api/v1/service-types/').json().then(async (data: any) => {
+        const arr = data.data || data || [];
+        return Array.isArray(arr) ? arr : [];
+      })
+    ])
+      .then(([v, t]) => {
+        setVehiclesList(v);
+        setServiceTypes(t);
+        if (!v.length || !t.length) setFormError("Impossible de charger les listes. Session expirée ou accès refusé.");
+      })
+      .catch(() => setFormError('Erreur lors du chargement des listes.'))
+      .finally(() => setIsFormLoading(false));
+  }, [isAddModalOpen, token]);
 
-  // --- Handlers ---
-  const handleRefresh = () => {
-     if (!isAuthLoading && isAuthenticated && token && authAxios) {
-        console.log("[ServicesPage] Manual Refresh triggered.")
-        fetchServiceEvents();
-        fetchVehicles();
-     }
+  // Stats
+  const stats = {
+    total: serviceEvents.length,
+    planned: serviceEvents.filter(e => ['scheduled', 'planifie'].includes((e.status || '').toLowerCase())).length,
+    inProgress: serviceEvents.filter(e => ['inprogress', 'encours'].includes((e.status || '').toLowerCase())).length,
+    completed: serviceEvents.filter(e => ['completed', 'termine'].includes((e.status || '').toLowerCase())).length,
   };
 
-  const handleAddSuccess = () => {
-    setIsAddModalOpen(false);
-    handleRefresh(); // Refresh list after adding
+  // Filtres/recherche (UI seulement, logique à brancher)
+  const filteredEvents = serviceEvents.filter(e => {
+    const matchesStatus = statusFilter ? (e.status || '').toLowerCase() === statusFilter : true;
+    const matchesSearch = search
+      ? (e.vehicle_info?.registration_number || '').toLowerCase().includes(search.toLowerCase()) ||
+        (e.service_type_info?.name || '').toLowerCase().includes(search.toLowerCase())
+      : true;
+    return matchesStatus && matchesSearch;
+  });
+
+  // Helpers pour stats
+  const getMileageField = (record: any, fields: string[], def: string = '-') => {
+    for (const f of fields) if (record[f] !== undefined && record[f] !== null) return record[f];
+    return def;
   };
-  
-  const handleViewDetails = (event: ServiceEvent) => {
+  const formatNumber = (v?: number | string) => {
+    const n = typeof v === 'string' ? parseFloat(v) : v;
+    return n !== undefined && n !== null && !isNaN(n) ? n.toLocaleString('fr-FR') : '0';
+  };
+  const calculateMileageStats = () => {
+    if (!mileageRecords.length) return { total: 0, avg: 0, last: 0 };
+    const total = mileageRecords.length;
+    const totalKm = mileageRecords.reduce((sum, r) => sum + Number(getMileageField(r, ['kilometrage', 'mileage'], '0')), 0);
+    const avg = totalKm / total;
+    const sorted = [...mileageRecords].sort((a, b) => new Date(getMileageField(b, ['date', 'created_at'])).getTime() - new Date(getMileageField(a, ['date', 'created_at'])).getTime());
+    const last = Number(getMileageField(sorted[0], ['kilometrage', 'mileage'], '0'));
+    return { total, avg, last };
+  };
+  const { total, avg, last } = calculateMileageStats();
+
+  const form = useForm<ServiceFormValues>({
+    resolver: zodResolver(serviceFormSchema),
+    defaultValues: { vehicle: '', service_type: '', event_date: '', mileage: '', notes: '' },
+  });
+
+  const handleEdit = (event: ServiceEvent) => {
     setSelectedEvent(event);
-    setIsDetailsModalOpen(true);
+    setIsEditMode(true);
+    setIsAddModalOpen(true);
+    form.reset({
+      vehicle: event.vehicle_info?.registration_number || '',
+      service_type: event.service_type_info?.name || '',
+      event_date: event.event_date ? event.event_date.slice(0, 16) : '',
+      mileage: event.mileage_at_service?.toString() || '',
+      notes: event.notes || '',
+    });
   };
 
-  // --- Render Logic ---
+  const handleAdd = () => {
+    setSelectedEvent(null);
+    setIsEditMode(false);
+    setIsAddModalOpen(true);
+    form.reset({ vehicle: '', service_type: '', event_date: '', mileage: '', notes: '' });
+  };
 
-  // Loading state during initial auth check
-  if (isAuthLoading) {
-    return <div className="p-6">Vérification de l'authentification...</div>;
+  const handleSubmitService = async (values: ServiceFormValues) => {
+    setIsFormLoading(true);
+    setFormError(null);
+    try {
+      if (!token) throw new Error("Non authentifié");
+      let eventDateISO = values.event_date;
+      if (eventDateISO && !eventDateISO.endsWith('Z') && eventDateISO.length === 16) {
+        eventDateISO = eventDateISO + ':00';
+      }
+      if (isEditMode && selectedEvent) {
+        await api.patch(`api/v1/service-events/${selectedEvent.id}/`, {
+          json: {
+            vehicle_id: values.vehicle,
+            service_type_id: values.service_type,
+            event_date: eventDateISO,
+            mileage_at_service: values.mileage,
+            notes: values.notes,
+          }
+        });
+      } else {
+        await api.post('api/v1/service-events/', {
+          json: {
+            vehicle_id: values.vehicle,
+            service_type_id: values.service_type,
+            event_date: eventDateISO,
+            mileage_at_service: values.mileage,
+            notes: values.notes,
+          }
+        });
+      }
+      setIsAddModalOpen(false);
+      form.reset();
+      setIsDataLoading(true);
+      api.get('api/v1/service-events/')
+        .json()
+        .then((data: any) => {
+          const results = Array.isArray(data) ? data : data.results || data.data || [];
+          setServiceEvents(results);
+        })
+        .catch((err: any) => {
+          setError("Erreur lors du chargement des interventions. " + (err?.message || ''));
+        })
+        .finally(() => setIsDataLoading(false));
+    } catch (err: any) {
+      setFormError("Erreur lors de la " + (isEditMode ? "modification" : "création") + " de l'intervention. " + (err?.message || ''));
+    } finally {
+      setIsFormLoading(false);
+    }
+  };
+
+  // Handler pour ouvrir la modale de suppression
+  const handleDeleteClick = (event: ServiceEvent) => {
+    setEventToDelete(event);
+    setIsDeleteModalOpen(true);
+    setDeleteError(null);
+  };
+
+  // Handler pour confirmer la suppression
+  const handleConfirmDelete = async () => {
+    if (!eventToDelete) return;
+    setIsDeleteLoading(true);
+    setDeleteError(null);
+    try {
+      await api.delete(`api/v1/service-events/${eventToDelete.id}/`);
+      setIsDeleteModalOpen(false);
+      setEventToDelete(null);
+      setIsDataLoading(true);
+      api.get('api/v1/service-events/')
+        .json()
+        .then((data: any) => {
+          const results = Array.isArray(data) ? data : data.results || data.data || [];
+          setServiceEvents(results);
+        })
+        .catch((err: any) => {
+          setError("Erreur lors du chargement des interventions. " + (err?.message || ''));
+        })
+        .finally(() => setIsDataLoading(false));
+      // TODO: toast de succès
+    } catch (err: any) {
+      setDeleteError("Erreur lors de la suppression. " + (err?.message || ''));
+    } finally {
+      setIsDeleteLoading(false);
+    }
+  };
+
+  // Loader
+  if (isAuthLoading || isDataLoading) {
+    return <div className="flex flex-col gap-6 p-6">
+      <div className="flex gap-4">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-8 w-32" />
+        <Skeleton className="h-8 w-32" />
+        <Skeleton className="h-8 w-32" />
+      </div>
+      <Skeleton className="h-12 w-full" />
+      <Skeleton className="h-64 w-full" />
+    </div>;
   }
 
-  // Display error if any
-  if (error && !isDataLoading) {
+  // Erreur d'auth
+  if (!isAuthLoading && !isAuthenticated) {
+    return (
+      <div className="p-6">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Erreur</AlertTitle>
+          <AlertDescription>Authentification requise ou session expirée.</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  // Erreur de fetch
+  if (error) {
     return (
       <div className="p-6">
         <Alert variant="destructive">
@@ -235,272 +346,244 @@ const ServicesPage: React.FC = () => {
       </div>
     );
   }
-  
-  // Calculate stats based on fetched serviceEvents
-  const stats = {
-      planned: serviceEvents.filter(e => {
-        const normalizedStatus = e.status?.toLowerCase().replace(/[\s_-]/g, '') || '';
-        return normalizedStatus === 'scheduled' || normalizedStatus === 'planifie';
-      }).length,
-      inProgress: serviceEvents.filter(e => {
-        const normalizedStatus = e.status?.toLowerCase().replace(/[\s_-]/g, '') || '';
-        return normalizedStatus === 'inprogress' || normalizedStatus === 'encours';
-      }).length,
-      completed: serviceEvents.filter(e => {
-        const normalizedStatus = e.status?.toLowerCase().replace(/[\s_-]/g, '') || '';
-        return normalizedStatus === 'completed' || normalizedStatus === 'termine';
-      }).length
-  };
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Gestion des Services</h1>
-        <div className="flex space-x-2">
-          <Button variant={viewMode === 'list' ? 'default' : 'outline'} onClick={() => setViewMode('list')} size="sm">
-            <ListFilterIcon className="w-4 h-4 mr-2" />
-            Liste
-          </Button>
-          <Button variant={viewMode === 'calendar' ? 'default' : 'outline'} onClick={() => setViewMode('calendar')} size="sm">
-            <CalendarIcon className="w-4 h-4 mr-2" />
-            Calendrier
-          </Button>
-           <Button variant="outline" onClick={handleRefresh} size="sm" disabled={isDataLoading}> 
-              <RefreshCw className={`w-4 h-4 mr-2 ${isDataLoading ? 'animate-spin' : ''}`} />
-             Actualiser
-          </Button>
-          <Button onClick={() => setIsAddModalOpen(true)} size="sm">
+    <div className="p-6 space-y-6 bg-background text-primary min-h-screen rounded-lg shadow" style={{ background: 'oklch(0.26 0.03 262.69)' }}>
+      {/* Header + stats */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold mb-1 text-primary">Gestion des Services</h1>
+          <div className="flex gap-4 mt-2">
+            <span className="text-sm text-muted-foreground">Total : <b>{stats.total}</b></span>
+            <span className="text-sm text-primary">Planifiés : <b>{stats.planned}</b></span>
+            <span className="text-sm text-yellow-600">En cours : <b>{stats.inProgress}</b></span>
+            <span className="text-sm text-green-600">Terminés : <b>{stats.completed}</b></span>
+          </div>
+        </div>
+        <div className="flex gap-2 items-center">
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Recherche plaque/type..."
+              className="input input-bordered pl-8 pr-2 py-1 rounded-lg bg-muted text-primary border-none focus:ring-2 focus:ring-primary"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+          </div>
+          <select
+            className="input input-bordered py-1 rounded-lg bg-muted text-primary border-none focus:ring-2 focus:ring-primary"
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+          >
+            <option value="">Tous statuts</option>
+            <option value="scheduled">Planifié</option>
+            <option value="inprogress">En cours</option>
+            <option value="completed">Terminé</option>
+            <option value="cancelled">Annulé</option>
+          </select>
+          <Button onClick={handleAdd} size="sm" className="bg-primary text-white hover:bg-primary/80 rounded-lg shadow">
             <PlusCircle className="w-4 h-4 mr-2" />
             Ajouter Intervention
           </Button>
         </div>
       </div>
-
-      {/* Stats Cards */}
-       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Planifiés</CardTitle></CardHeader>
-            <CardContent><div className="text-2xl font-bold">{isDataLoading ? <Skeleton className="h-8 w-10 inline-block"/> : stats.planned}</div></CardContent>
-          </Card>
-           <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">En Cours</CardTitle></CardHeader>
-            <CardContent><div className="text-2xl font-bold">{isDataLoading ? <Skeleton className="h-8 w-10 inline-block"/> : stats.inProgress}</div></CardContent>
-          </Card>
-           <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Terminés</CardTitle></CardHeader>
-            <CardContent><div className="text-2xl font-bold">{isDataLoading ? <Skeleton className="h-8 w-10 inline-block"/> : stats.completed}</div></CardContent>
-          </Card>
-      </div>
-
-      {/* Main Content Area */}
-      <div className="grid grid-cols-1 gap-6">
-        {viewMode === 'list' && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Liste des Interventions</CardTitle>
-              <CardDescription>Interventions planifiées, en cours et terminées.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Plaque</TableHead>
-                    <TableHead>Titre/Type</TableHead>
-                    <TableHead>Statut</TableHead>
-                    <TableHead>Date Planifiée</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isDataLoading && (
-                    Array.from({ length: 3 }).map((_, index) => (
-                      <TableRow key={`skel-${index}`}>
-                        <TableCell><Skeleton className="h-5 w-8" /></TableCell>
-                        <TableCell><Skeleton className="h-5 w-20" /></TableCell>
-                        <TableCell><Skeleton className="h-5 w-32" /></TableCell>
-                        <TableCell><Skeleton className="h-5 w-16" /></TableCell>
-                        <TableCell><Skeleton className="h-5 w-20" /></TableCell>
-                        <TableCell><Skeleton className="h-8 w-16" /></TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                  {!isDataLoading && serviceEvents.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground py-6">
-                        Aucune intervention trouvée.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {!isDataLoading && serviceEvents.map((event) => (
-                    <TableRow key={event.id}>
-                      <TableCell className="font-medium">{event.id}</TableCell>
-                      <TableCell>{event.vehicle_info?.registration_number || 'N/A'}</TableCell>
-                      <TableCell>{event.title || event.service_type_info?.name || 'Sans titre'}</TableCell>
-                      <TableCell>
-                        <span className="capitalize">{getStatusLabel(event.status)}</span>
-                      </TableCell>
-                      <TableCell>
-                        {event.event_date ? format(new Date(event.event_date), 'dd/MM/yyyy') : '-'}
-                      </TableCell>
-                      <TableCell>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => handleViewDetails(event)}
-                        >
-                          Détails
+      {/* Table détaillée */}
+      <div className="rounded-lg shadow p-4 overflow-x-auto" style={{ background: 'oklch(0.26 0.03 262.69)' }}>
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="bg-background dark:bg-zinc-800">
+              <th className="px-3 py-2 text-left">ID</th>
+              <th className="px-3 py-2 text-left">Plaque</th>
+              <th className="px-3 py-2 text-left">Type</th>
+              <th className="px-3 py-2 text-left">Statut</th>
+              <th className="px-3 py-2 text-left">Date</th>
+              <th className="px-3 py-2 text-left">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredEvents.length === 0 ? (
+              <tr><td colSpan={6} className="text-center text-muted-foreground">Aucune intervention trouvée.</td></tr>
+            ) : (
+              filteredEvents.map(event => {
+                const statusKey = (event.status || '').toLowerCase();
+                return (
+                  <tr key={event.id} className="border-b border-zinc-200 dark:border-zinc-800">
+                    <td className="px-3 py-2">{event.id}</td>
+                    <td className="px-3 py-2">{event.vehicle_info?.registration_number || 'N/A'}</td>
+                    <td className="px-3 py-2">{event.service_type_info?.name || 'Type inconnu'}</td>
+                    <td className="px-3 py-2">
+                      <Badge className={
+                        statusKey === 'completed' || statusKey === 'termine' ? 'bg-green-500 text-white' :
+                        statusKey === 'inprogress' || statusKey === 'encours' ? 'bg-yellow-500 text-white' :
+                        statusKey === 'cancelled' || statusKey === 'annule' ? 'bg-destructive text-white' :
+                        statusKey === 'scheduled' || statusKey === 'planifie' ? 'bg-primary text-white' :
+                        'bg-muted text-primary'
+                      }>
+                        {STATUS_LABELS[statusKey] || event.status}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-2">{formatDate(event.event_date)}</td>
+                    <td className="px-3 py-2 flex gap-1">
+                      <Button size="icon" variant="outline" className="bg-muted hover:bg-accent text-primary rounded-lg" title="Voir" aria-label="Voir" onClick={() => { setSelectedEvent(event); setIsDetailsModalOpen(true); }}>
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button size="icon" variant="outline" className="bg-muted hover:bg-accent text-primary rounded-lg" title="Éditer" aria-label="Éditer" onClick={() => handleEdit(event)}>
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button size="icon" variant="destructive" className="bg-destructive text-white hover:bg-destructive/80 rounded-lg" title="Supprimer" aria-label="Supprimer" onClick={() => handleDeleteClick(event)}>
+                        <Trash2 className="w-4 h-4" />
                         </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        )}
-
-        {viewMode === 'calendar' && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Calendrier des Services</CardTitle>
-              <CardDescription>Visualisation par date (à implémenter).</CardDescription>
-            </CardHeader>
-            <CardContent className="h-96 flex items-center justify-center text-muted-foreground">
-              Calendrier non disponible pour le moment.
-            </CardContent>
-          </Card>
-        )}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
       </div>
-
-      {/* Add Service Event Modal */}
-      {vehicles.length > 0 ? (
-        <AddServiceEventForm
-          open={isAddModalOpen}
-          onClose={() => setIsAddModalOpen(false)}
-          vehicles={vehicles} // Pass fetched vehicles
-          onAdd={handleAddSuccess} // Use the new handler
-        />
-      ) : isAddModalOpen && (
-        // If modal should be open but we have no vehicles, show error or fetch them
-        <div>
-          {console.log("[ServicesPage] Attempted to open AddServiceEventForm but no vehicles available")}
-          {!isAuthLoading && fetchVehicles()} {/* Attempt to fetch vehicles if not already loading */}
-        </div>
-      )}
-      
-      {/* Service Details Modal */}
+      {/* Modale de détails */}
       <Dialog open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen}>
-        <DialogContent 
-          className="sm:max-w-[500px] dark:bg-slate-900 dark:border-slate-800"
-          aria-labelledby="service-details-title"
-          aria-describedby="service-details-description"
-          role="dialog"
-          aria-modal="true"
-        >
+        <DialogContent className="sm:max-w-[500px] dark:bg-slate-900 dark:border-slate-800">
           <DialogHeader>
-            <DialogTitle id="service-details-title" className="text-foreground">
-              Détails de l'intervention
-            </DialogTitle>
-            <DialogDescription id="service-details-description" className="text-muted-foreground">
-              Informations détaillées sur l'intervention de service
-            </DialogDescription>
+            <DialogTitle>Détails de l'intervention</DialogTitle>
+            <DialogDescription>Informations détaillées sur l'intervention de service</DialogDescription>
             <DialogClose asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute top-4 right-4 h-8 w-8"
-                aria-label="Fermer les détails de l'intervention"
-              >
-                <X className="h-4 w-4" />
+              <Button variant="ghost" size="icon" className="absolute top-4 right-4 h-8 w-8" aria-label="Fermer les détails de l'intervention">
+                ×
               </Button>
             </DialogClose>
           </DialogHeader>
-          
           {selectedEvent && (
             <>
-              <div className="py-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-3">
-                    <div>
-                      <div className="text-sm font-medium text-muted-foreground mb-1">ID</div>
-                      <div className="text-foreground">{selectedEvent.id}</div>
+              <div className="py-4 space-y-2">
+                <div><span className="font-medium">ID :</span> {selectedEvent.id}</div>
+                <div><span className="font-medium">Plaque :</span> {selectedEvent.vehicle_info?.registration_number || 'N/A'}</div>
+                <div><span className="font-medium">Type :</span> {selectedEvent.service_type_info?.name || 'Type inconnu'}</div>
+                <div><span className="font-medium">Statut :</span> <Badge variant={STATUS_COLORS[(selectedEvent.status || '').toLowerCase()] as 'outline' | 'secondary' | 'default' | 'destructive' | undefined || 'secondary'}>{STATUS_LABELS[(selectedEvent.status || '').toLowerCase()] || selectedEvent.status}</Badge></div>
+                <div><span className="font-medium">Date :</span> {formatDate(selectedEvent.event_date)}</div>
+                <div><span className="font-medium">Kilométrage :</span> {selectedEvent.mileage_at_service ? `${selectedEvent.mileage_at_service} km` : 'Non spécifié'}</div>
+                {selectedEvent.notes && <div><span className="font-medium">Notes :</span> {selectedEvent.notes}</div>}
+                {selectedEvent.service_type_info?.description && <div><span className="font-medium">Description :</span> {selectedEvent.service_type_info.description}</div>}
                     </div>
-                    
-                    <div>
-                      <div className="text-sm font-medium text-muted-foreground mb-1">Titre</div>
-                      <div className="text-foreground">{selectedEvent.title || selectedEvent.service_type_info?.name || 'Sans titre'}</div>
+              <div className="mt-6">
+                <h3 className="text-lg font-semibold mb-2">Suivi kilométrique</h3>
+                {isMileageLoading ? (
+                  <Skeleton className="h-8 w-48" />
+                ) : mileageError ? (
+                  <div className="text-red-500 text-sm">{mileageError}</div>
+                ) : (
+                  <>
+                    <div className="flex gap-4 mb-2">
+                      <span className="text-sm text-muted-foreground">Total relevés : <b>{total}</b></span>
+                      <span className="text-sm text-blue-600">Moyenne : <b>{formatNumber(avg)} km</b></span>
+                      <span className="text-sm text-green-600">Dernier : <b>{formatNumber(last)} km</b></span>
                     </div>
-                    
-                    <div>
-                      <div className="text-sm font-medium text-muted-foreground mb-1">Véhicule</div>
-                      <div className="text-foreground">{selectedEvent.vehicle_info?.registration_number || 'N/A'}</div>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-xs border">
+                        <thead>
+                          <tr className="bg-zinc-100 dark:bg-zinc-800">
+                            <th className="px-2 py-1">ID</th>
+                            <th className="px-2 py-1">Km</th>
+                            <th className="px-2 py-1">Date</th>
+                            <th className="px-2 py-1">Source</th>
+                            <th className="px-2 py-1">Commentaire</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {mileageRecords.length === 0 ? (
+                            <tr><td colSpan={5} className="text-center text-zinc-500">Aucun relevé trouvé.</td></tr>
+                          ) : (
+                            mileageRecords.map((r) => (
+                              <tr key={r.id}>
+                                <td className="px-2 py-1">{r.id}</td>
+                                <td className="px-2 py-1">{formatNumber(getMileageField(r, ['kilometrage', 'mileage']))} km</td>
+                                <td className="px-2 py-1">{getMileageField(r, ['date', 'created_at'])}</td>
+                                <td className="px-2 py-1">{getMileageField(r, ['source']) === 'client' ? 'Client' : 'Admin'}</td>
+                                <td className="px-2 py-1">{getMileageField(r, ['commentaire', 'comment'])}</td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
                     </div>
-                    
-                    <div>
-                      <div className="text-sm font-medium text-muted-foreground mb-1">Kilométrage</div>
-                      <div className="text-foreground">
-                        {selectedEvent.mileage_at_service 
-                          ? `${selectedEvent.mileage_at_service} km`
-                          : 'Non spécifié'
-                        }
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <div>
-                      <div className="text-sm font-medium text-muted-foreground mb-1">Type de service</div>
-                      <div className="text-foreground">{selectedEvent.service_type_info?.name || 'Non spécifié'}</div>
-                    </div>
-                    
-                    <div>
-                      <div className="text-sm font-medium text-muted-foreground mb-1">Date planifiée</div>
-                      <div className="text-foreground">
-                        {selectedEvent.event_date 
-                          ? format(new Date(selectedEvent.event_date), 'dd/MM/yyyy')
-                          : 'Non spécifiée'
-                        }
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <div className="text-sm font-medium text-muted-foreground mb-1">Statut</div>
-                      <Badge variant={
-                        selectedEvent.status === 'scheduled' ? 'outline' : 
-                        selectedEvent.status === 'in_progress' ? 'secondary' :
-                        selectedEvent.status === 'completed' ? 'default' : 
-                        'destructive'
-                      }>
-                        {getStatusLabel(selectedEvent.status)}
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
-                
-                {selectedEvent.notes && (
-                  <div className="mt-4">
-                    <div className="text-sm font-medium text-muted-foreground mb-1">Notes</div>
-                    <div className="text-foreground p-3 bg-background dark:bg-slate-800 border rounded-md">
-                      {selectedEvent.notes}
-                    </div>
-                  </div>
-                )}
-                
-                {selectedEvent.service_type_info?.description && (
-                  <div className="mt-4">
-                    <div className="text-sm font-medium text-muted-foreground mb-1">Description du type de service</div>
-                    <div className="text-foreground text-sm p-3 bg-background dark:bg-slate-800 border rounded-md">
-                      {selectedEvent.service_type_info.description}
-                    </div>
-                  </div>
+                  </>
                 )}
               </div>
             </>
           )}
         </DialogContent>
       </Dialog>
+      {/* Modale d'ajout à implémenter ici (structure prête) */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-background text-primary rounded-lg shadow-lg p-6 min-w-[340px] max-w-[95vw]">
+            <h2 className="text-lg font-bold mb-4">{isEditMode ? 'Éditer une intervention' : 'Ajouter une intervention'}</h2>
+            {formError ? (
+              <div className="text-red-500 text-sm mb-2">{formError}</div>
+            ) : isFormLoading ? (
+              <div className="text-muted-foreground">Chargement des listes...</div>
+            ) : (
+              <form onSubmit={form.handleSubmit(handleSubmitService)} className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Véhicule</label>
+                  <select {...form.register('vehicle')} className="input input-bordered w-full bg-background text-primary rounded-lg border-none focus:ring-2 focus:ring-primary">
+                    <option value="">Sélectionner...</option>
+                    {Array.isArray(vehiclesList) && vehiclesList.map((v: any) => (
+                      <option key={v.id} value={v.id} className="bg-background text-primary">{v.registration_number} {v.make} {v.model}</option>
+                    ))}
+                  </select>
+                  {form.formState.errors.vehicle && <div className="text-red-500 text-xs">{form.formState.errors.vehicle.message}</div>}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Type de service</label>
+                  <select {...form.register('service_type')} className="input input-bordered w-full bg-background text-primary rounded-lg border-none focus:ring-2 focus:ring-primary">
+                    <option value="">Sélectionner...</option>
+                    {Array.isArray(serviceTypes) && serviceTypes.map((t: any) => (
+                      <option key={t.id} value={t.id} className="bg-background text-primary">{t.name}</option>
+                    ))}
+                  </select>
+                  {form.formState.errors.service_type && <div className="text-red-500 text-xs">{form.formState.errors.service_type.message}</div>}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Date et heure</label>
+                  <input type="datetime-local" {...form.register('event_date')} className="input input-bordered w-full bg-background text-primary rounded-lg border-none focus:ring-2 focus:ring-primary" />
+                  {form.formState.errors.event_date && <div className="text-red-500 text-xs">{form.formState.errors.event_date.message}</div>}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Kilométrage</label>
+                  <input type="number" {...form.register('mileage')} className="input input-bordered w-full bg-background text-primary rounded-lg border-none focus:ring-2 focus:ring-primary" />
+                  {form.formState.errors.mileage && <div className="text-red-500 text-xs">{form.formState.errors.mileage.message}</div>}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Notes</label>
+                  <textarea {...form.register('notes')} className="input input-bordered w-full bg-background text-primary rounded-lg border-none focus:ring-2 focus:ring-primary" rows={2} />
+                </div>
+                <div className="flex gap-2 justify-end mt-2">
+                  <Button type="button" variant="outline" className="bg-muted text-primary rounded-lg" onClick={() => setIsAddModalOpen(false)} disabled={isFormLoading}>Annuler</Button>
+                  <Button type="submit" className="bg-primary text-white hover:bg-primary/80 rounded-lg" disabled={isFormLoading}>{isFormLoading ? (isEditMode ? 'Enregistrement...' : 'Ajout...') : (isEditMode ? 'Enregistrer' : 'Ajouter')}</Button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+      {/* Modale de confirmation de suppression */}
+      {isDeleteModalOpen && eventToDelete && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-lg p-6 min-w-[340px] max-w-[95vw]">
+            <h2 className="text-lg font-bold mb-4 text-red-600">Confirmer la suppression</h2>
+            <p className="mb-4">Voulez-vous vraiment supprimer l'intervention <b>#{eventToDelete.id}</b> pour le véhicule <b>{eventToDelete.vehicle_info?.registration_number}</b> ?</p>
+            {deleteError && <div className="text-red-500 text-sm mb-2">{deleteError}</div>}
+            <div className="flex gap-2 justify-end mt-2">
+              <Button type="button" variant="outline" onClick={() => setIsDeleteModalOpen(false)} disabled={isDeleteLoading}>Annuler</Button>
+              <Button type="button" variant="destructive" onClick={handleConfirmDelete} disabled={isDeleteLoading}>
+                {isDeleteLoading ? 'Suppression...' : 'Supprimer'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

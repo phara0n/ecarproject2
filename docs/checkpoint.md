@@ -1,5 +1,5 @@
 # E-Car Admin Portal - Development Checkpoint
-**Last Updated: August 16, 2024**
+**Last Updated: August 18, 2024**
 
 ## Project Status
 - **Status**: In Progress
@@ -68,6 +68,25 @@
    - Improved accessibility with keyboard navigation
    - Added detailed service recommendations
    - Added edit functionality for vehicle properties
+
+## Nouveauté : Rafraîchissement automatique de la liste clients
+- Après édition ou suppression d'un client, la liste se met à jour automatiquement sans rechargement manuel.
+- Implémentation via un callback `refreshClients` passé par le contexte et déclenché dans les modales.
+- `ClientTable` écoute un `refreshKey` pour relancer la récupération des données.
+
+## Migration Axios → Ky
+- La migration du client HTTP Ky est en cours (Axios encore présent dans le package.json, à supprimer totalement prochainement).
+- Tous les nouveaux composants doivent utiliser Ky exclusivement.
+
+## Dépendances principales (18 août 2024)
+- Frontend : React 19, Ky 1.8, Shadcn UI, Radix UI, Tailwind 4, Zod 4, react-hook-form, react-router-dom 7, etc.
+- Backend : Django 5.2, DRF 3.16, simplejwt, drf-yasg, psycopg2-binary, etc.
+
+## Prochaines étapes
+- Finaliser la migration Axios → Ky (suppression d'Axios)
+- Ajouter des tests d'intégration pour la gestion client
+- Continuer la granularisation des composants client
+- Mettre à jour la documentation technique
 
 ## Technical Updates (14 Avril 2025)
 
@@ -161,6 +180,8 @@ Refer to the new [`http_client_standards.md`](./http_client_standards.md) docume
 - Correction de l'erreur de pagination dans CustomersPage
 - Amélioration de la gestion des profils utilisateurs
 - Ajout de logs détaillés pour faciliter le débogage
+- Correction de la gestion de session : redirection automatique vers /login si token absent/invalide (conformité sécurité/règles projet)
+- Correction dans AddServiceEventForm : redirection automatique vers /login en cas d'erreur d'authentification API
 
 ### En Cours de Développement
 - Migration complète d'Axios vers Ky comme client HTTP
@@ -171,6 +192,7 @@ Refer to the new [`http_client_standards.md`](./http_client_standards.md) docume
 - Quelques problèmes de contraste UI en mode sombre
 - Inconsistances dans les endpoints API
 - Certaines dépendances nécessitent le flag `--legacy-peer-deps`
+- À surveiller : retours utilisateurs sur la déconnexion automatique et tests sur toutes les routes protégées
 
 ### Prochaines Étapes
 1. Finaliser la migration Axios vers Ky
@@ -547,3 +569,63 @@ Prochaines étapes:
 - **25 Août**: Premier déploiement sur pré-production
 - **28 Août**: Tests complets et corrections des problèmes
 - **31 Août**: Accès client pour revue
+
+## Sécurité & conformité
+
+- Ce comportement de redirection automatique est obligatoire pour la sécurité et l'expérience utilisateur (voir .cursor/rules/project_rules.mdc)
+
+## 17 Août 2024 - Nouvelle Refonte Granulaire de la Page Client
+
+### Découpage et organisation
+- Création d'un dossier `src/pages/client/` pour la nouvelle page Client (remplaçant CustomersPage.tsx)
+- Création d'un dossier `src/components/client/` pour tous les sous-composants (table, formulaire, modales, filtres, etc.)
+- Objectif : meilleure maintenabilité, évolutivité, et respect des conventions du projet
+
+### Plan de découpage
+| Sous-composant         | Statut      | Notes |
+|-----------------------|-------------|-------|
+| Tableau principal     | 🚧 À créer  | Pagination, filtres, actions |
+| Formulaire client     | 🚧 À créer  | Création/édition, validation Zod |
+| Modales (ajout, edit, suppression, reset password) | 🚧 À créer | Utilisation des composants UI existants |
+| Filtres avancés       | 🚧 À créer  | Recherche, statut, etc. |
+| Helpers/formatteurs   | ✅ Existent | À réutiliser depuis utils/formatters.ts |
+
+### Prochaines étapes
+- Définir les interfaces TypeScript pour les clients et les formulaires
+- Commencer par le tableau principal (affichage + pagination)
+- Ajouter progressivement les autres sous-composants
+- Mettre à jour la documentation à chaque étape
+
+### 17 Août 2024 - Initialisation de la structure granulaire Client
+- Fichiers créés :
+  - `ClientPage.tsx` (point d'entrée)
+  - `ClientTable.tsx`, `ClientFilters.tsx`, `ClientModals.tsx`, `ClientForm.tsx` (sous-composants)
+  - `types.ts` (types Client/User, pagination)
+- Prochaine étape : implémenter le tableau principal (affichage + pagination, récupération via Ky)
+
+## Lancement Backend/Frontend - 18 avril 2025
+
+### Backend (Django)
+- Présence d'un venv Python dans `backend/.venv`.
+- Problème rencontré : la commande `pip` globale n'est pas installée, mais le venv contient son propre pip.
+- Solution :
+  - Toujours activer le venv (`source .venv/bin/activate`) avant toute commande Python/pip.
+  - Installer les dépendances dans le venv.
+  - Lancer les migrations (`python manage.py migrate`) puis le serveur (`python manage.py runserver 0.0.0.0:8000`).
+
+### Frontend (admin-web)
+- Stack : React 19, Vite, Shadcn UI, Radix UI, Tailwind.
+- Problème rencontré :
+  - `npm install` échoue à cause d'un conflit de peer dependencies entre `react@19` et `react-day-picker@8.10.1` (qui ne supporte que jusqu'à React 18).
+  - Malgré l'échec, `npm run dev` fonctionne et le serveur Vite démarre.
+- Solution temporaire :
+  - Utiliser `npm install --legacy-peer-deps` pour forcer l'installation.
+  - Surveiller les bugs potentiels liés à ce conflit.
+  - Prévoir une migration/downgrade de React ou attendre la compatibilité de `react-day-picker`.
+
+### Prochaines étapes
+- Documenter toute manipulation manuelle dans ce fichier et dans `for_mehd.md`.
+- Ne pas ignorer les warnings npm, même si le dev server fonctionne.
+- Toujours utiliser le venv Python pour le backend.
+
+---

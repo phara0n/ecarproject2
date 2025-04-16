@@ -5,7 +5,7 @@ from .models import Vehicle, MileageRecord, ServiceType, ServiceEvent, Predictio
 from .serializers import (
     VehicleSerializer, MileageRecordSerializer, ServiceTypeSerializer, 
     ServiceEventSerializer, PredictionRuleSerializer, ServicePredictionSerializer,
-    RegisterSerializer, UserSerializer, InvoiceSerializer, CustomerListSerializer
+    RegisterSerializer, UserSerializer, InvoiceSerializer, CustomerListSerializer, ProfileSerializer
 )
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.db import transaction
@@ -18,6 +18,7 @@ from rest_framework import serializers
 from django.contrib.auth.models import Group
 from rest_framework import exceptions
 from django.views import View
+from rest_framework.decorators import action
 
 # Get User model instance
 User = get_user_model()
@@ -946,11 +947,23 @@ class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAdminUser] # Only admins can manage users
 
-    # Note: The 'create' action is effectively disabled here by permissions
-    # if RegisterView is the intended way for users to be created.
-    # Admins *can* technically create users via this endpoint if needed,
-    # but it won't assign them to the 'Customers' group automatically like RegisterSerializer.
+    # Custom action to update the user's profile
+    @action(detail=True, methods=['put', 'patch'], url_path='profile', serializer_class=ProfileSerializer)
+    def profile_update(self, request, pk=None):
+        """
+        Met à jour le profil (ex: numéro de téléphone) associé à cet utilisateur.
+        """
+        user = self.get_object()
+        profile = getattr(user, 'customer_profile', None)
+        if not profile:
+            return Response({"detail": "Profil non trouvé pour cet utilisateur."}, status=status.HTTP_404_NOT_FOUND)
 
+        serializer = self.get_serializer(profile, data=request.data, partial=request.method == 'PATCH')
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    # --- Standard ViewSet actions below ---
     @swagger_auto_schema(
         operation_summary="Lister tous les utilisateurs (Admin)",
         operation_description="Retourne la liste de tous les utilisateurs enregistrés. Réservé aux administrateurs.",

@@ -1,6 +1,50 @@
 # État du Projet ECAR
 
-**Dernière mise à jour : 16 Août 2024**
+**Dernière mise à jour : 18 Août 2024**
+
+## Nouveauté : Rafraîchissement Automatique de la Liste Clients
+
+- Implémentation d'un système de rafraîchissement automatique de la liste des clients après modification (édition ou suppression) :
+  - Le composant `ClientPage` gère désormais un état `refreshKey` qui est incrémenté à chaque opération réussie.
+  - Ce callback est passé via le contexte `ClientModalContext` et utilisé dans `ClientModals` (après suppression ou édition) pour déclencher le rafraîchissement.
+  - `ClientTable` accepte une prop `refreshKey` et relance la récupération des données à chaque changement de cette clé.
+  - L'expérience utilisateur est ainsi plus fluide et cohérente, sans rechargement manuel.
+
+## État des dépendances (18 Août 2024)
+
+### Frontend (admin-web/package.json)
+- React 19.x
+- Ky 1.8.x (migration depuis Axios en cours, Axios encore présent mais à retirer à terme)
+- Shadcn UI, Radix UI, Tailwind CSS 4.x
+- Zod 4.x (validation)
+- react-hook-form, react-router-dom 7.x
+- Autres : moment, date-fns, i18next, lucide-react, etc.
+
+### Backend (backend/requirements.txt)
+- Django 5.2
+- djangorestframework 3.16
+- djangorestframework_simplejwt 5.5
+- drf-yasg (Swagger/OpenAPI)
+- psycopg2-binary (PostgreSQL)
+- PyJWT, python-dateutil, pytz, PyYAML, etc.
+
+## Points de conformité et règles projet
+- Respect des conventions Corsor AI (voir `.cursor/rules/project_rules.mdc`)
+- API RESTful, versionnée, réponses `{data, error, metadata}`
+- Localisation 100% française (frontend et backend)
+- Migration progressive Axios → Ky (ne plus utiliser Axios dans les nouveaux composants)
+- Validation et formatage centralisés (formatters.ts, Zod)
+- Accessibilité et contrastes UI (WCAG AA, contrast-patterns.md)
+
+## Prochaines étapes
+- Finaliser la migration Axios → Ky (suppression totale d'Axios)
+- Ajouter des tests d'intégration pour la gestion client
+- Continuer l'amélioration de la granularité des composants (dossier client)
+- Mettre à jour la documentation technique et les guides de migration
+
+---
+
+Pour toute question ou point bloquant, voir aussi `docs/checkpoint.md` (état détaillé du développement) et `docs/what_was_done.md` (log des tâches réalisées).
 
 ## Modifications Récentes
 
@@ -785,3 +829,104 @@ server {
 - Documentation complète du processus de déploiement dans le dossier `docs/deployment/` (60% terminée)
 - Monitoring mis en place avec Prometheus et Grafana pour surveiller les performances et la santé du système
 - Journal des déploiements maintenu via GitLab pour assurer la traçabilité des modifications
+
+# Correction de la gestion de session et conformité sécurité (17 Avril 2025)
+
+## Correction appliquée
+- Si le token d'authentification est absent ou invalide (après F5, expiration, suppression, etc.), l'utilisateur est désormais automatiquement redirigé vers la page de connexion (`/login`).
+- Cette redirection est immédiate et systématique, conformément aux exigences de sécurité et d'expérience utilisateur du projet (voir `.cursor/rules/project_rules.mdc`).
+- Dans le composant `AddServiceEventForm`, si une erreur d'authentification (401 ou message "Authentification requise ou session expirée") est détectée lors d'une requête API, une redirection automatique vers `/login` est également déclenchée.
+
+## Pourquoi ?
+- Ce comportement est **obligatoire** pour éviter toute fuite d'information, confusion utilisateur ou accès non autorisé à l'interface.
+- Il garantit la conformité avec les règles Corsor AI et les standards de sécurité du projet.
+
+## Prochaines étapes
+- Surveiller les retours utilisateurs sur la déconnexion automatique.
+- Tester le comportement sur toutes les routes protégées (après F5, expiration de session, suppression manuelle du token, etc.).
+- Documenter ce comportement dans tous les guides d'intégration frontend.
+
+---
+
+(Entrée ajoutée le 17/04/2025)
+
+## 17 Août 2024 - Initialisation de la structure granulaire Client
+- Création des fichiers de base :
+  - `ClientPage.tsx` (point d'entrée)
+  - `ClientTable.tsx`, `ClientFilters.tsx`, `ClientModals.tsx`, `ClientForm.tsx` (sous-composants)
+  - `types.ts` (centralisation des types Client/User, pagination)
+- Prochaine étape : implémenter le tableau principal avec récupération des clients via Ky et affichage paginé.
+
+---
+
+- La route `/customers` du dashboard utilise désormais la nouvelle `ClientPage` granulaire (remplace CustomersPage.tsx dans la navigation principale).
+
+---
+
+# Mise à jour du 18 avril 2025 - Lancement Backend/Frontend
+
+## Situation actuelle
+
+- **Backend** :
+  - Le backend Django est bien présent dans `backend/` avec un environnement virtuel `.venv`.
+  - Tentative de lancement échouée car la commande `pip` globale n'est pas installée, mais le projet utilise un venv Python local.
+  - Prochaine étape : activer l'environnement virtuel (`source .venv/bin/activate`) puis installer les dépendances et lancer le serveur (`python manage.py runserver`).
+
+- **Frontend** :
+  - Le frontend (`admin-web/`) utilise React 19 et Vite.
+  - `npm install` échoue à cause d'un conflit de dépendances entre `react@19` et `react-day-picker@8.10.1` (qui ne supporte que jusqu'à React 18).
+  - Malgré l'erreur, `npm run dev` fonctionne, mais il faudra résoudre ce conflit pour garantir la stabilité.
+
+## Prochaines étapes immédiates
+
+1. **Backend** :
+   - Toujours activer le venv avant toute commande Python/pip.
+   - Vérifier que toutes les dépendances sont installées dans le venv.
+   - Lancer les migrations puis le serveur.
+
+2. **Frontend** :
+   - Résoudre le conflit de dépendances (downgrade React ou attendre la compatibilité de `react-day-picker`).
+   - Continuer le développement, mais surveiller les bugs liés à ce conflit.
+
+## Points de vigilance
+- Toujours utiliser le venv Python pour le backend.
+- Ne pas ignorer les warnings npm, même si le dev server démarre.
+- Documenter toute manipulation manuelle dans ce fichier.
+
+## 18 avril 2025 - Lancement effectif des serveurs
+
+- **Backend** :
+  - Serveur Django lancé avec succès via :
+    ```bash
+    cd ecar-project/backend
+    source .venv/bin/activate
+    python manage.py runserver 0.0.0.0:8000
+    ```
+  - Accessible sur : http://localhost:8000
+  - Authentification et endpoints principaux OK (logs 200 sur /api/v1/users/me/, /api/v1/vehicles/, etc.)
+
+- **Frontend** :
+  - Serveur Vite lancé avec succès via :
+    ```bash
+    cd ecar-project/admin-web
+    npm run dev
+    ```
+    (NB : npm install échoue à cause du conflit react-day-picker, mais le dev server fonctionne)
+  - Accessible sur : http://localhost:5173
+
+### Points de vigilance
+- Le conflit npm (react@19 vs react-day-picker@8.10.1) persiste, mais n'empêche pas le dev server de tourner. À surveiller pour la prod !
+- Toujours activer le venv Python pour le backend.
+- Documenter toute manipulation manuelle ou workaround dans ce fichier.
+
+---
+
+## 18 avril 2025 - Ajout du champ mot de passe à la création de client
+
+- Lors de la création d'un client (id=0), deux champs sont affichés : « Mot de passe » et « Confirmation du mot de passe ».
+- Validation : au moins 6 caractères, confirmation obligatoire et identique.
+- À la soumission, le formulaire envoie un POST `/api/v1/register/` avec tous les champs requis.
+- En édition, ces champs n'apparaissent pas et la logique reste inchangée.
+- UX : le workflow de création est maintenant complet et conforme aux exigences de sécurité.
+
+---

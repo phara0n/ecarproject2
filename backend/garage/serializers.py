@@ -6,6 +6,7 @@ from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model # Import get_user_model
 from django.db import transaction
 from django.core.exceptions import ValidationError
+from datetime import datetime
 
 # Get the actual User model class
 User = get_user_model()
@@ -113,10 +114,9 @@ class ServiceEventSerializer(serializers.ModelSerializer):
     service_type_id = serializers.PrimaryKeyRelatedField(
         queryset=ServiceType.objects.all(), source='service_type', write_only=True
     )
-    vehicle_info = VehicleSerializer(source='vehicle', read_only=True)
-    service_type_info = ServiceTypeSerializer(source='service_type', read_only=True)
-    # Explicitly define event_date to handle representation
-    event_date = serializers.DateField()
+    vehicle_info = serializers.SerializerMethodField()
+    service_type_info = serializers.SerializerMethodField()
+    event_date = serializers.DateTimeField()
 
     class Meta:
         model = ServiceEvent
@@ -128,11 +128,50 @@ class ServiceEventSerializer(serializers.ModelSerializer):
             'mileage_at_service', 
             'notes', 
             'created_at',
-            # Read-only representations
             'vehicle_info', 
             'service_type_info',
         ]
         read_only_fields = ['id', 'created_at']
+
+    def get_vehicle_info(self, obj):
+        if not obj.vehicle:
+            return None
+        return {
+            'id': obj.vehicle.id,
+            'registration_number': obj.vehicle.registration_number,
+            'make': obj.vehicle.make,
+            'model': obj.vehicle.model
+        }
+    
+    def get_service_type_info(self, obj):
+        if not obj.service_type:
+            return None
+        return {
+            'id': obj.service_type.id,
+            'name': obj.service_type.name,
+            'description': obj.service_type.description
+        }
+    
+    def to_representation(self, instance):
+        # Convertir le champ event_date en datetime si c'est un date
+        from datetime import date
+        if hasattr(instance, 'event_date') and isinstance(instance.event_date, date) and not isinstance(instance.event_date, datetime):
+            instance.event_date = datetime.combine(instance.event_date, datetime.min.time())
+            instance.save(update_fields=['event_date'])
+        
+        return super().to_representation(instance)
+
+    def create(self, validated_data):
+        service_event = super().create(validated_data)
+        mileage = validated_data.get('mileage_at_service')
+        if mileage:
+            MileageRecord.objects.create(
+                vehicle=service_event.vehicle,
+                mileage=mileage,
+                recorded_at=service_event.event_date,
+                source='ADMIN'
+            )
+        return service_event
 
 class PredictionRuleSerializer(serializers.ModelSerializer):
     """Serializer for the PredictionRule model."""
@@ -187,20 +226,51 @@ class ServicePredictionSerializer(serializers.ModelSerializer):
 # --- User Serializer --- 
 
 class UserSerializer(serializers.ModelSerializer):
-    """Serializer for the User model (used for displaying user info)."""
+    phone_number = serializers.SerializerMethodField()
+
     class Meta:
-        model = User # Use the actual User model class
-        fields = ['id', 'username', 'email', 'first_name', 'last_name']
+        model = User
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'phone_number']
+
+    def get_phone_number(self, obj):
+        # Utilise le related_name customer_profile défini dans le modèle
+        return getattr(obj.customer_profile, 'phone_number', None)
+
+    def create(self, validated_data):
+        phone_number = validated_data.pop('phone_number', '')
+        user = super().create(validated_data)
+        from garage.models import CustomerProfile
+        CustomerProfile.objects.create(user=user, phone_number=phone_number)
+        return user
+
+    def update(self, instance, validated_data):
+        phone_number = validated_data.pop('phone_number', None)
+        user = super().update(instance, validated_data)
+        if phone_number is not None:
+            from garage.models import CustomerProfile
+            profile, _ = CustomerProfile.objects.get_or_create(user=user)
+            profile.phone_number = phone_number
+            profile.save()
+        return user
+
+# --- Profile Serializer (for updating phone number) ---
+class ProfileSerializer(serializers.ModelSerializer):
+     class Meta:
+         model = CustomerProfile
+         fields = ['phone_number'] # Only allow updating phone_number for now
+         extra_kwargs = {
+             'phone_number': {'validators': [tunisian_phone_validator]}
+         }
 
 # --- Minimal Customer List Serializer ---
 class CustomerListSerializer(serializers.ModelSerializer):
     """Minimal serializer for listing customers (ID, Username, First/Last Name, Email, Phone)."""
-    # Get phone number from related CustomerProfile
-    phone_number = serializers.CharField(source='customerprofile.phone_number', read_only=True)
+    # Correctement sourcer le numéro de téléphone du profil lié
+    phone_number = serializers.CharField(source='customer_profile.phone_number', read_only=True, allow_null=True)
 
     class Meta:
         model = User
-        # Add first_name, last_name, email, and phone_number to the fields list
+        # S'assurer que phone_number est dans la liste
         fields = ['id', 'username', 'first_name', 'last_name', 'email', 'phone_number']
 
 class RegisterSerializer(serializers.ModelSerializer):

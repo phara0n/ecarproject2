@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'drf_yasg',
     'corsheaders',  # Add CORS headers support
     'garage',
+    'django_extensions',
 ]
 
 MIDDLEWARE = [

@@ -290,8 +290,8 @@ const VehiclesPage = () => {
                         <Button variant="outline" size="sm" onClick={() => handleViewDetails(vehicle)}>Détails</Button>
                         <Button variant="outline" size="sm" className="ml-2 text-orange-600 border-orange-600 hover:bg-orange-50" onClick={() => {
                           setPredictionVehicle({
-                            id: vehicle.id,
-                            registration_number: getVehicleField(vehicle, ['registration_number', 'immatriculation', 'license_plate'])
+                            id: Number(vehicle.id),
+                            registration_number: String(getVehicleField(vehicle, ['registration_number', 'immatriculation', 'license_plate'], ''))
                           });
                           setIsPredictionModalOpen(true);
                         }}>

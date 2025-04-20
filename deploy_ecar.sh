@@ -242,7 +242,7 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 # Installer les dépendances manquantes explicitement
-RUN pip install django-cors-headers gunicorn
+RUN pip install django-cors-headers gunicorn django-extensions==3.2.3
 
 # Copier le code source
 COPY . .
@@ -269,7 +269,7 @@ RUN npm install --legacy-peer-deps
 # Copier le code source
 COPY . .
 
-# Construire l'application
+# Construire l'application (échoue si erreur TypeScript)
 ARG VITE_API_URL
 ENV VITE_API_URL=\${VITE_API_URL}
 RUN npm run build
@@ -285,6 +285,8 @@ EXPOSE 80
 
 # Nginx démarre automatiquement dans l'image, pas besoin de CMD
 EOF
+
+echo -e "${YELLOW}Si le build frontend échoue, vérifiez que src/lib/utils.ts existe et que l'alias @ est bien configuré dans tsconfig.json et vite.config.ts !${NC}"
 
 # Créer le fichier .env pour les variables d'environnement
 echo -e "${GREEN}Configuration des variables d'environnement (.env)...${NC}"
@@ -750,4 +752,31 @@ echo -e ""
 echo -e "${GREEN}GESTION DES VARIABLES D'ENVIRONNEMENT:${NC}"
 echo -e "Pour gérer vos variables d'environnement ultérieurement, utilisez:"
 echo -e "${YELLOW}sudo manage_env${NC} (disponible globalement)"
-echo -e "Ou directement: ${YELLOW}sudo ${DEPLOY_DIR}/manage_env.sh${NC}" 
+echo -e "Ou directement: ${YELLOW}sudo ${DEPLOY_DIR}/manage_env.sh${NC}"
+
+# Nettoyage du frontend avant build
+cd "${DEPLOY_DIR}/admin-web"
+
+# Supprimer node_modules et package-lock.json pour repartir sur une base saine
+rm -rf node_modules package-lock.json
+
+# Réinstaller les dépendances (hors Docker, sur l'hôte)
+npm install
+
+# S'assurer que le fichier utils.ts est bien là
+if [ ! -f src/lib/utils.ts ]; then
+  echo -e "${RED}ERREUR: src/lib/utils.ts est manquant !${NC}"
+  exit 1
+fi
+
+# Ajouter le lockfile à git si besoin
+if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+  git add package-lock.json
+  git commit -m "fix: regenerate lockfile for clean Docker build" || true
+  git push || true
+fi
+
+cd "${DEPLOY_DIR}"
+
+docker compose build --no-cache backend
+docker compose up -d 

@@ -265,7 +265,7 @@ WORKDIR /app
 
 # Transférer les fichiers de dépendances
 COPY package*.json ./
-RUN npm ci --legacy-peer-deps
+RUN npm install --legacy-peer-deps
 
 # Copier le code source
 COPY . .

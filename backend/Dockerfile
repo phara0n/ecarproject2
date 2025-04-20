@@ -15,10 +15,14 @@ WORKDIR /app
 COPY --from=builder /app/wheels /wheels
 RUN pip install --no-cache /wheels/*
 
+# Installer les dépendances manquantes
+RUN pip install django-cors-headers
+
 COPY . .
 
 RUN pip install gunicorn
-RUN python manage.py collectstatic --noinput
+# On ignore temporairement collectstatic pour le build
+# RUN python manage.py collectstatic --noinput
 
 EXPOSE 8000
 

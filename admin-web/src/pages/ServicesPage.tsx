@@ -668,11 +668,12 @@ const ServicePredictionModal: React.FC<ServicePredictionModalProps> = ({ open, o
   const [predictions, setPredictions] = useState<ServicePrediction[]>([]);
 
   useEffect(() => {
+    console.log('DEBUG prediction modal:', { open, vehicle });
     if (!open || !vehicle?.id) return;
     setLoading(true);
     setError(null);
     setPredictions([]);
-    authAxios.get(`/api/v1/service-predictions/?vehicle_id=${vehicle.id}`)
+    authAxios.get(`api/v1/service-predictions/?vehicle_id=${vehicle.id}`)
       .then(res => res.json())
       .then((data) => {
         if (Array.isArray(data)) {
@@ -719,4 +720,6 @@ const ServicePredictionModal: React.FC<ServicePredictionModalProps> = ({ open, o
   );
 };
 
-export default ServicesPage; 
+export default ServicesPage;
+
+export { ServicePredictionModal }; 

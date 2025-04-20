@@ -10,6 +10,7 @@ import AddVehicleModal from '@/components/vehicles/AddVehicleModal';
 import { VehicleDetailsModal } from '@/components/vehicles/VehicleDetailsModal';
 import { useNavigate } from 'react-router-dom';
 import type { Vehicle } from "@/types/vehicle";
+import { ServicePredictionModal } from '@/pages/ServicesPage';
 
 // Define the Vehicle interface based on the actual API response
 // interface Vehicle {
@@ -45,6 +46,8 @@ const VehiclesPage = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [isPredictionModalOpen, setIsPredictionModalOpen] = useState(false);
+  const [predictionVehicle, setPredictionVehicle] = useState<{ id: number; registration_number: string } | null>(null);
 
   // Function to fetch vehicles from the API
   const fetchVehicles = async () => {
@@ -285,6 +288,15 @@ const VehiclesPage = () => {
                       <TableCell>
                         {/* Placeholder for actions */}
                         <Button variant="outline" size="sm" onClick={() => handleViewDetails(vehicle)}>Détails</Button>
+                        <Button variant="outline" size="sm" className="ml-2 text-orange-600 border-orange-600 hover:bg-orange-50" onClick={() => {
+                          setPredictionVehicle({
+                            id: vehicle.id,
+                            registration_number: getVehicleField(vehicle, ['registration_number', 'immatriculation', 'license_plate'])
+                          });
+                          setIsPredictionModalOpen(true);
+                        }}>
+                          Prédictions
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))
@@ -317,6 +329,12 @@ const VehiclesPage = () => {
           vehicle={selectedVehicle}
         />
       )}
+
+      <ServicePredictionModal
+        open={isPredictionModalOpen}
+        onOpenChange={setIsPredictionModalOpen}
+        vehicle={predictionVehicle}
+      />
     </div>
   );
 };

@@ -3,7 +3,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { PlusCircle, AlertCircle, Eye, Edit, Trash2, Search, BarChart2 } from 'lucide-react';
+import { PlusCircle, AlertCircle, Eye, Edit, Trash2, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from '@/components/ui/dialog';
 import * as z from 'zod';
@@ -118,8 +118,6 @@ const ServicesPage: React.FC = () => {
   const [eventToDelete, setEventToDelete] = useState<ServiceEvent | null>(null);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [isPredictionModalOpen, setIsPredictionModalOpen] = useState(false);
-  const [predictionVehicle, setPredictionVehicle] = useState<{ id: number; registration_number: string } | null>(null);
 
   const form = useForm<ServiceFormValues>({
     resolver: zodResolver(serviceFormSchema),
@@ -308,8 +306,8 @@ const ServicesPage: React.FC = () => {
           setError("Erreur lors du chargement des interventions. " + (err?.message || ''));
         })
         .finally(() => setIsDataLoading(false));
-    } catch (err: any) {
-      setFormError("Erreur lors de la " + (isEditMode ? "modification" : "création") + " de l'intervention. " + (err?.message || ''));
+    } catch (err: unknown) {
+      setFormError("Erreur lors de la " + (isEditMode ? "modification" : "création") + " de l'intervention. " + ((err instanceof Error && err.message) || ''));
     } finally {
       setIsFormLoading(false);
     }
@@ -346,23 +344,10 @@ const ServicesPage: React.FC = () => {
         })
         .finally(() => setIsDataLoading(false));
       // TODO: toast de succès
-    } catch (err: any) {
-      setDeleteError("Erreur lors de la suppression. " + (err?.message || ''));
+    } catch (err: unknown) {
+      setDeleteError("Erreur lors de la suppression. " + ((err instanceof Error && err.message) || ''));
     } finally {
       setIsDeleteLoading(false);
-    }
-  };
-
-  const handleShowPredictions = (event: ServiceEvent) => {
-    console.log('vehicle_info:', event.vehicle_info);
-    if (event.vehicle_info?.registration_number && event.vehicle_info.id) {
-      setPredictionVehicle({
-        id: event.vehicle_info.id,
-        registration_number: event.vehicle_info.registration_number,
-      });
-      setIsPredictionModalOpen(true);
-    } else {
-      alert('ID du véhicule manquant pour cette ligne.');
     }
   };
 
@@ -489,9 +474,6 @@ const ServicesPage: React.FC = () => {
                       </Button>
                       <Button size="icon" variant="outline" className="bg-muted hover:bg-accent text-primary rounded-lg" title="Éditer" aria-label="Éditer" onClick={() => handleEdit(event)}>
                         <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button size="icon" variant="outline" className="bg-muted hover:bg-accent text-primary rounded-lg" title="Prédictions" aria-label="Prédictions" onClick={() => handleShowPredictions(event)}>
-                        <BarChart2 className="w-4 h-4" />
                       </Button>
                       <Button size="icon" variant="destructive" className="bg-destructive text-white hover:bg-destructive/80 rounded-lg" title="Supprimer" aria-label="Supprimer" onClick={() => handleDeleteClick(event)}>
                         <Trash2 className="w-4 h-4" />
@@ -646,11 +628,6 @@ const ServicesPage: React.FC = () => {
           </div>
         </div>
       )}
-      <ServicePredictionModal
-        open={isPredictionModalOpen}
-        onOpenChange={setIsPredictionModalOpen}
-        vehicle={predictionVehicle}
-      />
     </div>
   );
 };

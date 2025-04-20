@@ -59,12 +59,6 @@ fi
 # Demander l'URL du site
 read -p "Entrez le domaine pour le site (ex: ecar.example.com): " DOMAIN_NAME
 
-# Vérifier que le domaine est correct
-if [[ ! $DOMAIN_NAME =~ ^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}$ ]]; then
-    echo -e "${RED}Domaine invalide. Format attendu: exemple.com${NC}"
-    exit 1
-fi
-
 # Vérifier si Docker est installé
 if ! command -v docker &> /dev/null; then
     echo -e "${GREEN}Installation de Docker...${NC}"

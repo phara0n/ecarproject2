@@ -1108,3 +1108,15 @@ Dernière mise à jour : [à compléter après chaque modification]
 - À retenir : Toujours activer le venv avant d'utiliser Django ou pip.
 
 ---
+
+## [Mise à jour majeure – 18 avril 2025]
+
+- **Corruption du dépôt Git local détectée** (objet manquant, HEAD invalide).
+- **Backup complet** du dossier `ecar-project` créé sous `ecar-project-backup-YYYYMMDD-HHMMSS`.
+- **Suppression du .git corrompu** et réinitialisation complète du dépôt (`git init`, `git add .`, commit unique).
+- **Ajout du remote** : `https://github.com/phara0n/ecarproject2.git`.
+- **Push forcé** de l'état local sur la branche `main` (commit unique de réinitialisation).
+- **Bascule de la branche par défaut** sur `main` sur GitHub (l'ancienne branche master est obsolète).
+- **Vérification** : tout l'état du projet est à jour sur GitHub, historique propre, backup local conservé.
+
+---

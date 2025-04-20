@@ -743,3 +743,34 @@ python manage.py runserver 0.0.0.0:8000
 ## À faire systématiquement
 - Toujours activer le venv avant d'utiliser pip ou Django.
 - Documenter tout incident ou workaround dans ce fichier.
+
+# Checkpoint – Réinitialisation Git (18 avril 2025)
+
+## Incident
+- Corruption critique du dépôt Git local (objet manquant, HEAD et refs invalides).
+- Impossible d'utiliser git status, commit, ou pull.
+
+## Procédure de récupération
+1. **Backup complet** du dossier `ecar-project` (hors .git) sous `ecar-project-backup-YYYYMMDD-HHMMSS`.
+2. **Suppression du dossier .git corrompu**.
+3. **Réinitialisation du dépôt** :
+   - `git init`
+   - `git add .`
+   - `git commit -m "Réinitialisation : version locale la plus récente après corruption"`
+4. **Ajout du remote** :
+   - `git remote add origin https://github.com/phara0n/ecarproject2.git`
+   - `git branch -M main`
+   - `git push -u origin main --force`
+5. **Bascule de la branche par défaut sur main** sur GitHub (Settings > Branches).
+
+## Résultat
+- Projet à jour sur la branche `main` du remote GitHub.
+- Ancienne branche `master` obsolète (à supprimer si besoin).
+- Historique Git perdu, mais tout l'état de travail est conservé.
+- Backup local disponible en cas de besoin.
+
+## À faire systématiquement
+- Documenter toute opération de récupération ou de réinitialisation majeure.
+- Toujours créer un backup avant manipulation destructive.
+
+---

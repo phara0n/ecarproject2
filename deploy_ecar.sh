@@ -229,31 +229,26 @@ EOF
 # Créer les Dockerfiles pour le backend (Django)
 echo -e "${GREEN}Création du Dockerfile pour le backend...${NC}"
 cat > backend/Dockerfile << EOF
-FROM python:3.10-slim-bullseye as builder
-
-WORKDIR /app
-COPY requirements.txt .
-RUN pip wheel --no-cache-dir --no-deps --wheel-dir /app/wheels -r requirements.txt
-
 FROM python:3.10-slim-bullseye
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
+ENV PYTHONDONTWRITEBYTECODE=1 \\
+    PYTHONUNBUFFERED=1 \\
     DJANGO_SETTINGS_MODULE=core.settings
 
 WORKDIR /app
 
-COPY --from=builder /app/wheels /wheels
-RUN pip install --no-cache /wheels/*
+# Installer les dépendances de base
+COPY requirements.txt .
+RUN pip install -r requirements.txt
 
-# Installer les dépendances manquantes
-RUN pip install django-cors-headers
+# Installer les dépendances manquantes explicitement
+RUN pip install django-cors-headers gunicorn
 
+# Copier le code source
 COPY . .
 
-RUN pip install gunicorn
-# On ignore temporairement collectstatic pour le build
-# RUN python manage.py collectstatic --noinput
+# Ne pas exécuter collectstatic pendant le build
+# Nous l'exécuterons manuellement après le démarrage du conteneur
 
 EXPOSE 8000
 

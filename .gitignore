@@ -1,0 +1,212 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+*.po
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+# According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
+# Pipfile.lock
+
+# PEP 582; used by PDM, Flit and potentially other management tools
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# PyCharm
+# User-specific stuff
+.idea/*/.idea/workspace.xml
+.idea/*/.idea/tasks.xml
+.idea/*/.idea/dictionaries
+.idea/*/.idea/vcs.xml
+.idea/*/.idea/jsLibraryMappings.xml
+
+# Sensitive User-specific stuff
+.idea/*/.idea/dataSources/
+.idea/*/.idea/dataSources.ids
+.idea/*/.idea/dataSources.local.xml
+.idea/*/.idea/sqlDataSources.xml
+.idea/*/.idea/dynamic.xml
+.idea/*/.idea/uiDesigner.xml
+.idea/*/.idea/dbnavigator.xml
+
+# Annotation plugin generated files - do not submit
+.idea/*/.idea/externalAnnotations.xml
+
+# Commodity plugins - do not submit
+# These plugins are user-installed and require the user to install them independently
+.idea/*/.idea/php.xml
+.idea/*/.idea/webServers.xml
+.idea/*/.idea/deployment.xml
+.idea/*/.idea/phpResources.xml
+.idea/*/.idea/copyProjectOptions.xml
+.idea/*/.idea/remoteInfo.xml
+
+# File-based project format
+*.iws
+
+# IntelliJ
+*.iml
+*.ipr
+out/
+
+# VS Code
+.vscode/
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+pnpm-debug.log
+*.local
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# ECAR Project specific
+/backend/media/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+dist/
+*.egg-info/
+venv/
+.env
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+*.lock
+
+# IDE / OS specific
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store 

@@ -1,0 +1,127 @@
+import { createContext, useContext } from 'react';
+
+// Define the shape of the user object (align with Django API response)
+interface User {
+  id: number | string; // Or UUID
+  username: string;
+  email: string;
+  first_name?: string;
+  last_name?: string;
+  // Add other relevant user fields provided by Django API
+  // e.g., roles: string[];
+}
+
+// Define the shape of the Auth Context state and actions
+interface AuthContextType {
+  user: User | null;
+  token: string | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  login: (credentials: { username: string; password: string }) => Promise<void>; // Async for API call
+  logout: () => void;
+  checkAuthStatus: () => Promise<void>; // Async for potential API call
+  refreshToken: () => Promise<string | null>; // Async function to refresh the expired token, returns the new token
+  authAxios: {
+    get: (url: string, options?: any) => Promise<any>;
+    post: (url: string, options?: any) => Promise<any>;
+    put: (url: string, options?: any) => Promise<any>;
+    delete: (url: string, options?: any) => Promise<any>;
+    patch: (url: string, options?: any) => Promise<any>;
+  };
+}
+
+// Create the context with a default value (initially undefined, or null state)
+// We'll throw an error if used outside a provider
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Custom hook to use the AuthContext
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+
+// Define props for the provider component
+// import { AuthProviderProps } from './types';
+
+// Placeholder for the actual provider implementation (will be created next)
+// export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => { ... };
+
+// Export the context itself if needed elsewhere, though using the hook is preferred
+export default AuthContext;
+
+// Export User interface for reuse
+export type { User, AuthContextType };
+
+// Récupérer l'URL de base de l'API depuis les variables d'environnement
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+
+// Adapter les URLs absolues en fonction de l'environnement
+const getApiUrl = (endpoint: string) => {
+  // Si l'endpoint commence déjà par http, on le laisse tel quel
+  if (endpoint.startsWith('http')) {
+    return endpoint;
+  }
+  
+  // Si l'endpoint commence par un slash, on l'ajoute directement à l'URL de base
+  if (endpoint.startsWith('/api')) {
+    return `${API_BASE_URL}${endpoint}`;
+  }
+  
+  // Sinon, on s'assure d'avoir un slash entre l'URL de base et l'endpoint
+  return `${API_BASE_URL}/${endpoint}`;
+};
+
+// Fonction de rafraîchissement du token
+const refreshToken = async () => {
+  if (!refreshTokenValue) return;
+
+  try {
+    // Utiliser getApiUrl pour construire l'URL complète
+    const response = await fetch(getApiUrl('/api/v1/token/refresh/'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refresh: refreshTokenValue }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Refresh token invalid or expired');
+    }
+
+    const data = await response.json();
+    setTokens({
+      access: data.access,
+      refresh: refreshTokenValue, // Keep the same refresh token
+    });
+    
+    return data.access;
+  } catch (error) {
+    console.error('Error refreshing token:', error);
+    logout();
+    throw error;
+  }
+};
+
+// Configuration Axios avec la nouvelle fonction getApiUrl
+const authAxios = {
+  get: async (url: string, options = {}) => {
+    const fullUrl = getApiUrl(url);
+    // ... existing code ...
+  },
+  post: async (url: string, data = {}, options = {}) => {
+    const fullUrl = getApiUrl(url);
+    // ... existing code ...
+  },
+  put: async (url: string, data = {}, options = {}) => {
+    const fullUrl = getApiUrl(url);
+    // ... existing code ...
+  },
+  delete: async (url: string, options = {}) => {
+    const fullUrl = getApiUrl(url);
+    // ... existing code ...
+  },
+}; 

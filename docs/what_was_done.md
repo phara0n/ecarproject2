@@ -682,3 +682,61 @@ For more details on implementation and usage patterns, please refer to `docs/htt
 ---
 
 ## Previous Updates 
+
+### What was done
+
+- Fixed backend launch issues:
+  1. First fix: Installed missing `django-extensions==4.1`
+  2. Second fix: Installed missing `whitenoise==6.9.0` for static file serving
+  3. Successfully launched the backend application from `ecar-project/backend/` using `python manage.py runserver 0.0.0.0:8000`
+- The frontend application was already running from `ecar-project/admin-web/` using `npm run dev`.
+- Both processes are running in the background:
+  - Backend (Django): http://localhost:8000
+  - Frontend (Vite): http://localhost:5173
+
+### Dependencies Added
+- Backend:
+  - Added `django-extensions==4.1`
+  - Added `whitenoise==6.9.0`
+
+# E-Car Admin Portal - Development Log
+
+## Latest Update: Migrating from Axios to Ky (14 Avril 2025)
+
+We've completed the migration from Axios to Ky for HTTP requests. This change brings several benefits:
+
+- **Better Performance**: Ky is much smaller (~7KB vs. Axios's larger size) and uses the browser's modern Fetch API
+- **Improved TypeScript Support**: First-class type definitions and a more modern API
+- **Better Promise Handling**: Cleaner chaining with `.json()`, `.text()`, etc. methods
+- **More Reliable Auth Flow**: Better token refresh handling with less potential for race conditions
+
+### Key Changes:
+
+1. **AuthProvider.tsx**:
+   - Replaced Axios with Ky for all HTTP requests
+   - Updated token management and auth interceptors to use Ky's hooks system
+   - Simplified state management by eliminating the Axios instance state
+   - Created a stable Ky client using `useMemo` to prevent unnecessary recreations
+
+2. **Components Using API Calls**:
+   - Updated API calls in `VehiclesPage.tsx` and `AddVehicleModal.tsx` to use the Ky syntax
+   - Updated error handling to properly parse Ky-specific error objects
+   - Fixed the authentication refresh flow to properly handle 401 responses
+
+3. **Documentation**:
+   - Created a new `http_client_standards.md` document with guidelines and examples
+   - Updated checkpoint documentation to reflect the technical changes
+
+For more details on implementation and usage patterns, please refer to `docs/http_client_standards.md`.
+
+---
+
+## Previous Updates 
+
+### What was done
+
+- Launched the backend application from `ecar-project/backend/` using `python manage.py runserver 0.0.0.0:8000` after activating the virtual environment from `../../.venv/`.
+- The frontend application was already running from `ecar-project/admin-web/` using `npm run dev`.
+- Both processes are running in the background:
+  - Backend (Django): http://localhost:8000
+  - Frontend (Vite): http://localhost:5173 

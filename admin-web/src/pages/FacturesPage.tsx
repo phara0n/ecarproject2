@@ -223,35 +223,66 @@ const FacturesPage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!selectedVehicle || !amount || !fileInputRef.current?.files?.[0]) {
-      setSubmitError('Veuillez remplir tous les champs obligatoires');
+    // Reset error state
+    setSubmitError(null);
+    
+    // Validate vehicle selection
+    if (!selectedVehicle) {
+      setSubmitError('Veuillez sélectionner un véhicule');
+      return;
+    }
+
+    // Validate amount
+    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+      setSubmitError('Veuillez entrer un montant valide');
+      return;
+    }
+
+    // Validate file
+    const file = fileInputRef.current?.files?.[0];
+    if (!file) {
+      setSubmitError('Veuillez sélectionner un fichier PDF');
+      return;
+    }
+
+    // Validate file type
+    if (!file.type.includes('pdf') && !file.name.toLowerCase().endsWith('.pdf')) {
+      setSubmitError('Seuls les fichiers PDF sont acceptés');
       return;
     }
     
     setIsSubmitting(true);
-    setSubmitError(null);
     
     try {
-      // Create form data for multipart/form-data request (required for file upload)
+      // Create form data for multipart/form-data request
       const formData = new FormData();
+      
+      // Log data being sent
+      console.log('Submitting form with data:', {
+        vehicle_id: selectedVehicle,
+        service_event_id: selectedService,
+        amount: amount,
+        invoice_date: invoiceDate,
+        file_name: file.name,
+        file_type: file.type
+      });
+      
       formData.append('vehicle_id', selectedVehicle);
       formData.append('final_amount', amount);
       formData.append('invoice_date', invoiceDate);
-      formData.append('pdf_file', fileInputRef.current.files[0]);
+      formData.append('pdf_file', file);
       
-      if (selectedService) {
+      if (selectedService && selectedService !== 'none') {
         formData.append('service_event_id', selectedService);
       }
       
-      console.log('Uploading file...', fileInputRef.current.files[0].name);
-      
-      // Send POST request to create invoice - use Ky with FormData
-      // Avec Ky, on passe directement le FormData comme body, sans l'encapsuler
+      // Send POST request to create invoice
       const response = await authAxios.post('api/v1/invoices/', formData);
       
       // Check response status
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('Server error response:', errorData);
         throw new Error(errorData.detail || 'Échec de la création de la facture');
       }
       
@@ -269,7 +300,11 @@ const FacturesPage = () => {
       }
     } catch (err) {
       console.error('Error creating invoice:', err);
-      setSubmitError(err instanceof Error ? err.message : 'Échec de la création de la facture');
+      setSubmitError(
+        err instanceof Error 
+          ? err.message 
+          : 'Une erreur est survenue lors de la création de la facture'
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -486,22 +521,23 @@ const FacturesPage = () => {
 
       {/* Add Invoice Modal */}
       <Dialog open={isAddInvoiceOpen} onOpenChange={setIsAddInvoiceOpen}>
-        <DialogContent className="sm:max-w-[480px] bg-background text-primary rounded-lg shadow-lg">
-          <DialogHeader>
-            <DialogTitle>Nouvelle Facture</DialogTitle>
+        <DialogContent className="sm:max-w-[550px] bg-background text-primary rounded-lg shadow-lg p-6">
+          <DialogHeader className="mb-6">
+            <DialogTitle className="text-2xl">Nouvelle Facture</DialogTitle>
             <DialogDescription>Ajouter une nouvelle facture PDF.</DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="grid gap-4 py-4">
+          
+          <form onSubmit={handleSubmit} className="space-y-6">
             {/* Vehicle Select */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="vehicle" className="text-right">Véhicule</Label>
+            <div className="space-y-2">
+              <Label htmlFor="vehicle" className="text-sm font-medium">Véhicule</Label>
               <Select onValueChange={setSelectedVehicle} value={selectedVehicle || ''} disabled={isVehiclesLoading}>
-                <SelectTrigger id="vehicle" className="col-span-3 bg-muted rounded-lg focus:ring-primary">
-                  <SelectValue placeholder={isVehiclesLoading ? 'Chargement...' : 'Sélectionner...'} />
+                <SelectTrigger id="vehicle" className="w-full bg-muted/50 border border-input hover:bg-muted focus:ring-1 focus:ring-primary">
+                  <SelectValue placeholder={isVehiclesLoading ? 'Chargement...' : 'Sélectionner un véhicule...'} />
                 </SelectTrigger>
-                <SelectContent className="bg-muted text-primary rounded-lg">
+                <SelectContent className="bg-background border border-input shadow-lg">
                   {vehicles.map((v) => (
-                    <SelectItem key={v.id} value={v.id.toString()} className="hover:bg-accent">
+                    <SelectItem key={v.id} value={v.id.toString()} className="hover:bg-muted focus:bg-muted">
                       {v.registration_number} ({v.make} {v.model})
                     </SelectItem>
                   ))}
@@ -509,21 +545,21 @@ const FacturesPage = () => {
               </Select>
             </div>
 
-            {/* Service Event Select (optional) */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="service" className="text-right">Service lié</Label>
+            {/* Service Event Select */}
+            <div className="space-y-2">
+              <Label htmlFor="service" className="text-sm font-medium">Service lié (optionnel)</Label>
               <Select 
                 onValueChange={setSelectedService} 
-                value={selectedService || ''} 
+                value={selectedService || 'none'} 
                 disabled={!selectedVehicle || isServicesLoading}
               >
-                <SelectTrigger id="service" className="col-span-3 bg-muted rounded-lg focus:ring-primary">
-                  <SelectValue placeholder={!selectedVehicle ? 'Choisir véhicule d\'abord' : isServicesLoading ? 'Chargement...' : 'Sélectionner service (optionnel)'} />
+                <SelectTrigger id="service" className="w-full bg-muted/50 border border-input hover:bg-muted focus:ring-1 focus:ring-primary">
+                  <SelectValue placeholder={!selectedVehicle ? 'Choisir véhicule d\'abord' : isServicesLoading ? 'Chargement...' : 'Sélectionner un service...'} />
                 </SelectTrigger>
-                <SelectContent className="bg-muted text-primary rounded-lg">
-                  <SelectItem value="" className="hover:bg-accent">Aucun service spécifique</SelectItem>
+                <SelectContent className="bg-background border border-input shadow-lg">
+                  <SelectItem value="none" className="hover:bg-muted focus:bg-muted">Aucun service spécifique</SelectItem>
                   {services.map((s) => (
-                    <SelectItem key={s.id} value={s.id.toString()} className="hover:bg-accent">
+                    <SelectItem key={s.id} value={s.id.toString()} className="hover:bg-muted focus:bg-muted">
                       {s.service_type_info.name} - {formatDate(s.event_date)}
                     </SelectItem>
                   ))}
@@ -531,66 +567,73 @@ const FacturesPage = () => {
               </Select>
             </div>
 
-            <Separator className="bg-border" />
+            <Separator className="bg-border/50" />
 
             {/* Amount Input */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="amount" className="text-right">Montant (DT)</Label>
+            <div className="space-y-2">
+              <Label htmlFor="amount" className="text-sm font-medium">Montant (DT)</Label>
               <Input 
                 id="amount" 
                 type="number" 
                 step="0.01" 
                 value={amount} 
                 onChange={(e) => setAmount(e.target.value)} 
-                className="col-span-3 bg-muted rounded-lg focus:ring-primary" 
+                className="w-full bg-muted/50 border border-input hover:bg-muted focus:ring-1 focus:ring-primary" 
+                placeholder="Entrer le montant..."
                 required 
               />
             </div>
 
             {/* Invoice Date Input */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="invoice-date" className="text-right">Date Facture</Label>
+            <div className="space-y-2">
+              <Label htmlFor="invoice-date" className="text-sm font-medium">Date Facture</Label>
               <Input 
                 id="invoice-date" 
                 type="date" 
                 value={invoiceDate} 
                 onChange={(e) => setInvoiceDate(e.target.value)} 
-                className="col-span-3 bg-muted rounded-lg focus:ring-primary" 
+                className="w-full bg-muted/50 border border-input hover:bg-muted focus:ring-1 focus:ring-primary" 
                 required 
               />
             </div>
 
             {/* File Input */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="pdf-file" className="text-right">Fichier PDF</Label>
+            <div className="space-y-2">
+              <Label htmlFor="pdf-file" className="text-sm font-medium">Fichier PDF</Label>
               <Input 
                 id="pdf-file" 
                 type="file" 
                 accept=".pdf" 
-                ref={fileInputRef} 
-                className="col-span-3 bg-muted rounded-lg focus:ring-primary file:bg-primary file:text-white file:rounded-lg file:border-none file:px-2 file:py-1 file:mr-2 hover:file:bg-primary/80 cursor-pointer" 
+                ref={fileInputRef}
+                className="w-full bg-muted/50 border border-input hover:bg-muted focus:ring-1 focus:ring-primary cursor-pointer file:mr-4 file:py-2 file:px-4 file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90" 
                 required 
               />
             </div>
 
             {submitError && (
-              <Alert variant="destructive" className="col-span-4 bg-destructive/10 border-destructive text-destructive rounded-lg">
+              <Alert variant="destructive" className="mt-4 bg-destructive/10 border-destructive text-destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Erreur</AlertTitle>
                 <AlertDescription>{submitError}</AlertDescription>
               </Alert>
             )}
-          </form>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button type="button" variant="outline" className="bg-muted text-primary hover:bg-accent rounded-lg">
-                Annuler
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <DialogClose asChild>
+                <Button type="button" variant="outline" className="w-full sm:w-auto bg-muted/50 hover:bg-muted">
+                  Annuler
+                </Button>
+              </DialogClose>
+              <Button 
+                type="submit" 
+                onClick={handleSubmit} 
+                disabled={isSubmitting} 
+                className="w-full sm:w-auto bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                {isSubmitting ? 'Ajout en cours...' : 'Ajouter Facture'}
               </Button>
-            </DialogClose>
-            <Button type="submit" onClick={handleSubmit} disabled={isSubmitting} className="bg-primary text-white hover:bg-primary/80 rounded-lg">
-              {isSubmitting ? 'Ajout...' : 'Ajouter Facture'}
-            </Button>
-          </DialogFooter>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

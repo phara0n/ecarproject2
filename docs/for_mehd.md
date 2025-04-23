@@ -1,6 +1,65 @@
 # État du Projet ECAR
 
-**Dernière mise à jour : 18 Août 2024**
+**Dernière mise à jour : 19 Août 2024**
+
+## Nouveauté : Configuration de la Navigation et de l'Authentification Mobile
+
+- **Navigation configurée**:
+  - Structure de navigation complète avec React Navigation
+  - Système de navigation à onglets pour l'interface principale
+  - Séparation propre des écrans d'authentification et de l'application
+  - Transitions fluides entre les écrans
+
+- **Authentification implémentée**:
+  - Client API avec Ky pour les appels au backend
+  - Gestion des tokens JWT avec AsyncStorage
+  - Rafraîchissement automatique des tokens expirés
+  - Contexte d'authentification pour gérer l'état de connexion globalement
+
+- **Amélioration des écrans existants**:
+  - Écran de connexion mis à jour pour utiliser l'authentification réelle
+  - Tableau de bord intégré avec la navigation à onglets
+
+- **Prochaines étapes**:
+  - Implémentation de l'écran des véhicules avec appels API
+  - Finalisation des autres écrans principaux
+  - Installation des dépendances restantes pour les formulaires et la localisation
+
+## Nouveauté : Progression de l'Application Mobile
+
+- **Structure du projet**:
+  - Initialisation du projet Expo avec TypeScript
+  - Création de la structure de dossiers (screens, components, api, etc.)
+  - Configuration des thèmes et styles de base (couleurs, typographie)
+  - Documentation complète du projet et des écrans
+
+- **Écrans implémentés**:
+  - Écran de connexion avec validation des formulaires
+  - Tableau de bord avec cartes résumé et navigation
+
+- **Fonctionnalités préparées**:
+  - Structure de navigation définie
+  - Plan d'intégration API établi
+  - Plan de gestion d'état avec Redux défini
+
+- **Prochaines étapes**:
+  - Installation des dépendances (React Navigation, Redux, Ky)
+  - Implémentation des écrans restants (véhicules, services, factures)
+  - Configuration de l'authentification JWT
+  - Intégration avec le backend existant
+
+## Nouveauté : Initialisation de l'Application Mobile
+
+- Création d'une nouvelle application mobile avec Expo et TypeScript
+- Structure de projet établie suivant les bonnes pratiques React Native
+- Documentation initiale créée pour faciliter le développement futur
+- L'application mobile implémentera les fonctionnalités client-side:
+  - Authentification utilisateur
+  - Gestion des véhicules
+  - Suivi du kilométrage
+  - Visualisation des prédictions de service
+  - Historique des services
+  - Consultation des factures
 
 ## Nouveauté : Rafraîchissement Automatique de la Liste Clients
 
@@ -1120,3 +1179,17 @@ Dernière mise à jour : [à compléter après chaque modification]
 - **Vérification** : tout l'état du projet est à jour sur GitHub, historique propre, backup local conservé.
 
 ---
+
+### Resume for Mehdi
+
+**Current Situation:**
+
+- The backend application (Django) has been successfully launched in the background from `ecar-project/backend/`.
+- The frontend admin dashboard (React) has been successfully launched in the background from `ecar-project/admin-web/`.
+- Both applications should now be accessible via their respective local development ports (typically 8000 for backend, 5173 for frontend, but confirm your configuration).
+
+**Next Steps:**
+
+- We need to continue development based on the project requirements, focusing on the features outlined in the project and project_rules documents.
+- I will be assisting you with coding tasks, following the specified coding, frontend, and backend rules.
+- I will continue to update these documentation files to keep track of our progress and next actions.

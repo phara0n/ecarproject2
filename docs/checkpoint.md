@@ -1,10 +1,35 @@
 # E-Car Admin Portal - Development Checkpoint
-**Last Updated: 18 Avril 2025**
+**Last Updated: 19 Août 2025**
 
 ## Project Status
 - **Status**: Stable (local production)
 - **Frontend**: Build Vite OK, corrections récentes sur FacturesPage, Zod, date-fns, imports, etc.
 - **Backend**: Django 5.2, Whitenoise OK, DEBUG=False, admin UI fonctionnelle
+- **Mobile App**: Nouvelle application Expo/React Native initialisée, structure créée, premiers écrans implémentés
+
+## Mobile App Status
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Project Structure | ✅ Complete | Folders, docs, and initial files created |
+| Login Screen | ✅ Implemented | Basic UI and validation implemented |
+| Dashboard | ✅ Implemented | Basic UI with cards and navigation |
+| Vehicles List | 🚧 Planned | UI design ready, implementation pending |
+| Vehicle Details | 🚧 Planned | UI design ready, implementation pending |
+| Service History | 🚧 Planned | UI design ready, implementation pending |
+| Odometer Update | 🚧 Planned | UI design ready, implementation pending |
+| Invoices | 🚧 Planned | UI design ready, implementation pending |
+| Navigation | 🚧 Pending | Basic structure defined, React Navigation to be installed |
+| API Integration | 🚧 Pending | API client structure defined, requires Ky setup |
+| State Management | 🚧 Pending | Redux structure defined, implementation pending |
+
+## Mobile App Next Steps
+1. Install dependencies (React Navigation, Redux, Ky, etc.)
+2. Set up navigation structure
+3. Implement remaining screens
+4. Connect to backend API
+5. Add authentication flow
+6. Implement state management
+7. Add localization support
 
 ## Component Status
 | Component | Status | Notes |
@@ -17,6 +42,7 @@
 | Service History | 🚧 En cours | Vue calendrier en développement |
 | Invoices | ✅ Working | Affichage, téléchargement, gestion dynamique des champs |
 | Notifications | 🚧 Non commencé | À planifier |
+| Mobile App | 🚧 Initié | Structure créée, développement à commencer |
 
 ## API Integration Status
 | Endpoint | Status | Notes |
@@ -774,3 +800,50 @@ python manage.py runserver 0.0.0.0:8000
 - Toujours créer un backup avant manipulation destructive.
 
 ---
+
+### Development Checkpoint
+
+**Project Status:**
+
+- Both backend (Django) and frontend (React admin dashboard) development servers are currently running in the background.
+- Initial project structure is in place with `backend/` and `admin-web/` directories.
+- Virtual environment (`.venv`) is being used for the backend.
+
+**Key Requirements Addressed (Initial Launch):**
+
+- Ability to launch backend and frontend applications for development.
+
+**Pending Key Requirements:**
+
+- **Backend:**
+  - Customer & Vehicle Management (Registration, Vehicle Ownership)
+  - Mileage Tracking (Submission and Validation)
+  - Average Daily KM Calculation (Formula implementation and API)
+  - Service Prediction Engine (Rule-based and future ML integration)
+  - Invoice Integration (Uploading and linking PDFs)
+  - Database setup (PostgreSQL tables: `customers`, `vehicles`, `mileage_records`)
+  - Security (JWT authentication, role-based access)
+  - Performance optimizations (Caching `average_daily_km`)
+- **Mobile App:** (Not yet started)
+  - Customer Features (Vehicle Dashboard, Mileage Input, Alerts)
+  - Mechanic Features (Task viewing and status updates)
+- **Admin Dashboard:**
+  - Vehicle Analytics (Usage Trends, Predictive Insights filtering)
+  - Workflow Tools (Calendar, Task assignment)
+  - Mileage Oversight (Audit interface, Override justification)
+  - UI/UX implementation (Shadcn UI components, Localization, Responsiveness)
+
+**Documentation Status:**
+
+- `what_was_done.md`: Created/Updated with launch steps.
+- `for_mehd.md`: Created with a summary.
+- `checkpoint.md`: Being created now.
+- `what_i_do.md`: To be created next.
+
+**Next Steps:**
+
+- Focus on implementing core backend functionalities (Customer/Vehicle Management, Mileage Tracking) as per the project requirements.
+- Ensure compliance with Corsor AI Rule #12 for backend API clarity and documentation as we build out endpoints.
+- Regularly update documentation files with progress.
+
+This checkpoint will be updated frequently to reflect our development progress.

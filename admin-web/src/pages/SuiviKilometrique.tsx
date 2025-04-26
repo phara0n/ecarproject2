@@ -7,6 +7,19 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useAuth } from '@/context/AuthContext';
 import { formatDate } from '@/utils/formatters';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogDescription, 
+  DialogHeader, 
+  DialogTitle,
+  DialogFooter, 
+  DialogClose 
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 
 // Define the MileageRecord interface based on the actual API response
 interface MileageRecord {
@@ -25,6 +38,14 @@ interface MileageRecord {
   comment?: string;
 }
 
+// Interface pour les véhicules
+interface Vehicle {
+  id: number;
+  registration_number: string;
+  make: string;
+  model: string;
+}
+
 const SuiviKilometrique = () => {
   const { authAxios, token, isAuthenticated } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
@@ -32,6 +53,19 @@ const SuiviKilometrique = () => {
   const [error, setError] = useState<string | null>(null);
   const [vehicleMap, setVehicleMap] = useState<Record<number, string>>({});
   const [search, setSearch] = useState('');
+  
+  // États pour le modal d'ajout
+  const [isAddMileageOpen, setIsAddMileageOpen] = useState(false);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [isVehiclesLoading, setIsVehiclesLoading] = useState(false);
+  const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
+  const [mileage, setMileage] = useState<string>('');
+  const [mileageDate, setMileageDate] = useState<string>(
+    new Date().toISOString().split('T')[0]
+  );
+  const [comment, setComment] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Function to fetch mileage records from the API
   const fetchMileageRecords = async () => {
@@ -97,6 +131,34 @@ const SuiviKilometrique = () => {
     fetchVehicles();
   }, [token, isAuthenticated]);
 
+  // Function to fetch vehicles for the dropdown
+  const fetchVehiclesForDropdown = async () => {
+    if (!token || !isAuthenticated) return;
+    setIsVehiclesLoading(true);
+    try {
+      const response = await authAxios.get('api/v1/vehicles/');
+      if (!response.ok) throw new Error('Erreur lors du chargement des véhicules');
+      const data = await response.json();
+      const vehiclesData = data.data || data;
+      if (!Array.isArray(vehiclesData)) {
+        throw new Error('Format de réponse API inattendu pour les véhicules');
+      }
+      setVehicles(vehiclesData);
+    } catch (err) {
+      console.error('Error fetching vehicles:', err);
+      setSubmitError(err instanceof Error ? err.message : 'Impossible de récupérer les véhicules');
+    } finally {
+      setIsVehiclesLoading(false);
+    }
+  };
+
+  // Récupérer les véhicules lors de l'ouverture du modal
+  useEffect(() => {
+    if (isAddMileageOpen) {
+      fetchVehiclesForDropdown();
+    }
+  }, [isAddMileageOpen]);
+
   // Helper to get the best available field with fallbacks
   const getMileageField = (record: MileageRecord, fields: string[], defaultValue: string = '-') => {
     for (const field of fields) {
@@ -106,6 +168,71 @@ const SuiviKilometrique = () => {
       }
     }
     return defaultValue;
+  };
+
+  // Function to handle form submission
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Reset error state
+    setSubmitError(null);
+    
+    // Validate vehicle selection
+    if (!selectedVehicle) {
+      setSubmitError('Veuillez sélectionner un véhicule');
+      return;
+    }
+
+    // Validate mileage
+    if (!mileage || isNaN(parseFloat(mileage)) || parseFloat(mileage) <= 0) {
+      setSubmitError('Veuillez entrer un kilométrage valide');
+      return;
+    }
+    
+    setIsSubmitting(true);
+    
+    try {
+      // Construire l'objet à envoyer
+      const mileageData = {
+        vehicle_id: parseInt(selectedVehicle),
+        mileage: parseFloat(mileage),
+        date: mileageDate,
+        comment: comment,
+        source: 'ADMIN'  // Enregistrement ajouté depuis le panel admin (en majuscules)
+      };
+      
+      console.log('Envoi des données:', mileageData);
+      
+      // Envoyer la requête POST pour créer l'enregistrement
+      const response = await authAxios.post('api/v1/mileage-records/', {
+        json: mileageData
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Server error response:', errorData);
+        throw new Error(errorData.detail || 'Échec de la création de l\'enregistrement');
+      }
+      
+      // Fermer le modal et rafraîchir la liste
+      setIsAddMileageOpen(false);
+      fetchMileageRecords();
+      
+      // Réinitialiser le formulaire
+      setSelectedVehicle(null);
+      setMileage('');
+      setMileageDate(new Date().toISOString().split('T')[0]);
+      setComment('');
+    } catch (err) {
+      console.error('Error creating mileage record:', err);
+      setSubmitError(
+        err instanceof Error 
+          ? err.message 
+          : 'Une erreur est survenue lors de la création de l\'enregistrement'
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Calculate stats safely (handling empty array)
@@ -172,7 +299,11 @@ const SuiviKilometrique = () => {
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Actualiser
           </Button>
-          <Button className="bg-primary text-white hover:bg-primary/80 rounded-lg shadow" type="button"> {/* TODO: Open modal */}
+          <Button 
+            className="bg-primary text-white hover:bg-primary/80 rounded-lg shadow" 
+            onClick={() => setIsAddMileageOpen(true)} 
+            type="button"
+          >
             <PlusIcon className="w-4 h-4 mr-2" />
             Nouvel Enregistrement
           </Button>
@@ -332,6 +463,100 @@ const SuiviKilometrique = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Modal d'ajout de kilométrage */}
+      <Dialog open={isAddMileageOpen} onOpenChange={setIsAddMileageOpen}>
+        <DialogContent className="sm:max-w-[550px] bg-background text-primary rounded-lg shadow-lg p-6">
+          <DialogHeader className="mb-6">
+            <DialogTitle className="text-2xl">Nouvel Enregistrement Kilométrique</DialogTitle>
+            <DialogDescription>Ajoutez un nouvel enregistrement de kilométrage.</DialogDescription>
+          </DialogHeader>
+          
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Sélection du véhicule */}
+            <div className="space-y-2">
+              <Label htmlFor="vehicle" className="text-sm font-medium">Véhicule</Label>
+              <Select onValueChange={setSelectedVehicle} value={selectedVehicle || ''} disabled={isVehiclesLoading}>
+                <SelectTrigger id="vehicle" className="w-full bg-muted/50 border border-input hover:bg-muted focus:ring-1 focus:ring-primary">
+                  <SelectValue placeholder={isVehiclesLoading ? 'Chargement...' : 'Sélectionner un véhicule...'} />
+                </SelectTrigger>
+                <SelectContent className="bg-background border border-input shadow-lg">
+                  {vehicles.map((v) => (
+                    <SelectItem key={v.id} value={v.id.toString()} className="hover:bg-muted focus:bg-muted">
+                      {v.registration_number} ({v.make} {v.model})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Kilométrage */}
+            <div className="space-y-2">
+              <Label htmlFor="mileage" className="text-sm font-medium">Kilométrage (km)</Label>
+              <Input 
+                id="mileage" 
+                type="number" 
+                step="1" 
+                min="0"
+                value={mileage} 
+                onChange={(e) => setMileage(e.target.value)} 
+                className="w-full bg-muted/50 border border-input hover:bg-muted focus:ring-1 focus:ring-primary" 
+                placeholder="Entrer le kilométrage..."
+                required 
+              />
+            </div>
+
+            {/* Date de l'enregistrement */}
+            <div className="space-y-2">
+              <Label htmlFor="mileage-date" className="text-sm font-medium">Date</Label>
+              <Input 
+                id="mileage-date" 
+                type="date" 
+                value={mileageDate} 
+                onChange={(e) => setMileageDate(e.target.value)} 
+                className="w-full bg-muted/50 border border-input hover:bg-muted focus:ring-1 focus:ring-primary" 
+                required 
+              />
+            </div>
+
+            {/* Commentaire */}
+            <div className="space-y-2">
+              <Label htmlFor="comment" className="text-sm font-medium">Commentaire (optionnel)</Label>
+              <Textarea 
+                id="comment" 
+                value={comment} 
+                onChange={(e) => setComment(e.target.value)} 
+                className="w-full bg-muted/50 border border-input hover:bg-muted focus:ring-1 focus:ring-primary" 
+                placeholder="Entrez un commentaire optionnel..."
+                rows={3}
+              />
+            </div>
+
+            {submitError && (
+              <Alert variant="destructive" className="mt-4 bg-destructive/10 border-destructive text-destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Erreur</AlertTitle>
+                <AlertDescription>{submitError}</AlertDescription>
+              </Alert>
+            )}
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <DialogClose asChild>
+                <Button type="button" variant="outline" className="w-full sm:w-auto bg-muted/50 hover:bg-muted">
+                  Annuler
+                </Button>
+              </DialogClose>
+              <Button 
+                type="submit" 
+                disabled={isSubmitting} 
+                className="w-full sm:w-auto bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                {isSubmitting ? 'Ajout en cours...' : 'Ajouter Enregistrement'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

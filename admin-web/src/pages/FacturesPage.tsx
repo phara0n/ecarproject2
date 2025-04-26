@@ -86,6 +86,12 @@ const FacturesPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // État pour la suppression
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Function to fetch invoices from the API
   const fetchInvoices = async () => {
@@ -115,6 +121,14 @@ const FacturesPage = () => {
       // Log the entire first invoice to see exact structure
       if (invoicesData.length > 0) {
         console.log('First invoice structure (complete):', JSON.stringify(invoicesData[0], null, 2));
+        
+        // Vérifier spécifiquement les champs liés au véhicule
+        const firstInvoice = invoicesData[0];
+        console.log('Vehicle info in first invoice:', {
+          vehicleId: firstInvoice.vehicle_id,
+          vehicleInfo: firstInvoice.vehicle_info,
+          registrationNumber: firstInvoice.vehicle_info?.registration_number
+        });
       }
 
       setInvoices(invoicesData);
@@ -184,15 +198,32 @@ const FacturesPage = () => {
         throw new Error('Aucun fichier disponible pour cette facture');
       }
       
-      // Determine if this is a full URL or just a path
-      const url = fileUrl.startsWith('http') ? fileUrl : `api/v1/media/${fileUrl}`;
+      console.log('File URL from invoice:', fileUrl);
       
-      console.log('Attempting to download file from:', url);
+      let response;
       
-      // Use Ky to get the file as a blob
-      const response = await authAxios.get(url, {
-        responseType: 'blob',
-      });
+      // For absolute URLs (starting with http), use fetch directly
+      // For relative paths, use the authAxios instance
+      if (fileUrl.startsWith('http')) {
+        // Use native fetch for absolute URLs to avoid base URL prepending
+        console.log('Downloading from absolute URL:', fileUrl);
+        response = await fetch(fileUrl, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+      } else {
+        // For relative paths, use authAxios
+        const relativeUrl = `api/v1/media/${fileUrl.replace(/^\//, '')}`;
+        console.log('Downloading from relative URL:', relativeUrl);
+        response = await authAxios.get(relativeUrl, {
+          responseType: 'blob',
+        });
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Échec du téléchargement: ${response.status} ${response.statusText}`);
+      }
       
       // Create a blob from the response
       const blob = await response.blob();
@@ -276,8 +307,22 @@ const FacturesPage = () => {
         formData.append('service_event_id', selectedService);
       }
       
+      // Debug log - vérifier ce que contient réellement le FormData
+      console.log('FormData entries:', Array.from(formData.entries()).map(entry => {
+        // Pour les fichiers, juste montrer le nom et le type
+        if (entry[1] instanceof File) {
+          return [entry[0], `File: ${entry[1].name} (${entry[1].type})`];
+        }
+        return entry;
+      }));
+      
       // Send POST request to create invoice
-      const response = await authAxios.post('api/v1/invoices/', formData);
+      // Modifier pour utiliser correctement Ky avec FormData
+      const response = await authAxios.post('api/v1/invoices/', {
+        body: formData,
+        // Ne pas définir Content-Type manuellement pour multipart/form-data
+        // Ky/fetch s'en occupe automatiquement avec le bon boundary
+      });
       
       // Check response status
       if (!response.ok) {
@@ -310,6 +355,42 @@ const FacturesPage = () => {
     }
   };
 
+  // Fonction pour afficher la boîte de dialogue de confirmation
+  const handleDeleteClick = (invoice: Invoice) => {
+    setInvoiceToDelete(invoice);
+    setIsDeleteDialogOpen(true);
+    setDeleteError(null);
+  };
+  
+  // Fonction pour supprimer une facture
+  const deleteInvoice = async () => {
+    if (!invoiceToDelete || !token || !isAuthenticated) return;
+    
+    setIsDeleting(true);
+    setDeleteError(null);
+    
+    try {
+      // Envoyer la requête DELETE
+      const response = await authAxios.delete(`api/v1/invoices/${invoiceToDelete.id}/`);
+      
+      // Vérifier si la suppression a réussi
+      if (response.status === 204 || response.ok) {
+        // Fermer la boîte de dialogue et actualiser la liste
+        setIsDeleteDialogOpen(false);
+        setInvoiceToDelete(null);
+        // Mettre à jour la liste locale sans refaire d'appel API
+        setInvoices(invoices.filter(invoice => invoice.id !== invoiceToDelete.id));
+      } else {
+        throw new Error('Échec de la suppression de la facture');
+      }
+    } catch (err) {
+      console.error('Erreur lors de la suppression:', err);
+      setDeleteError(err instanceof Error ? err.message : 'Une erreur est survenue lors de la suppression');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   // Fetch invoices on component mount
   useEffect(() => {
     fetchInvoices();
@@ -332,12 +413,29 @@ const FacturesPage = () => {
   // Helper to get the best available field with fallbacks
   const getInvoiceField = (invoice: Invoice, fields: string[], defaultValue: string = '-') => {
     for (const field of fields) {
+      // Cas spécial pour vehicle_info.registration_number (chemin imbriqué)
+      if (field.includes('.')) {
+        const [parentField, childField] = field.split('.');
+        const parent = invoice[parentField as keyof Invoice];
+        
+        if (parent && typeof parent === 'object' && childField in (parent as Record<string, any>)) {
+          return (parent as Record<string, any>)[childField];
+        }
+        continue; // Passer à la prochaine itération si le chemin imbriqué n'est pas valide
+      }
+      
       const value = invoice[field as keyof Invoice];
       if (value !== undefined && value !== null) {
         if (typeof value === 'object') {
-          // Si c'est un objet, on essaie d'afficher registration_number ou une propriété principale
-          if ('registration_number' in (value as any)) return (value as any).registration_number;
-          if ('make' in (value as any) && 'model' in (value as any)) return `${(value as any).make} ${(value as any).model}`;
+          // Si c'est un objet vehicle_info
+          if ('registration_number' in (value as Record<string, any>)) {
+            return (value as Record<string, any>).registration_number;
+          }
+          // Si c'est un autre type d'objet avec make/model
+          if ('make' in (value as Record<string, any>) && 'model' in (value as Record<string, any>)) {
+            return `${(value as Record<string, any>).make} ${(value as Record<string, any>).model}`;
+          }
+          // Dernier recours si c'est un objet sans structure connue
           return JSON.stringify(value);
         }
         return value;
@@ -488,7 +586,14 @@ const FacturesPage = () => {
                     <TableRow key={invoice.id} className="hover:bg-accent">
                       <TableCell className="font-medium">{invoice.id}</TableCell>
                       <TableCell>
-                        {getInvoiceField(invoice, ['vehicle_info.registration_number', 'vehicule_immatriculation', 'vehicle_license_plate'])}
+                        {invoice.vehicle_info && typeof invoice.vehicle_info === 'object' && invoice.vehicle_info.registration_number ? (
+                          invoice.vehicle_info.registration_number
+                        ) : getInvoiceField(invoice, [
+                          'vehicle_info.registration_number', 
+                          'vehicle_registration_number',
+                          'vehicule_immatriculation',
+                          'vehicle_license_plate'
+                        ])}
                       </TableCell>
                       <TableCell>{formatDate(String(getInvoiceField(invoice, ['invoice_date'])))}</TableCell>
                       <TableCell className="font-semibold">
@@ -498,8 +603,7 @@ const FacturesPage = () => {
                         <Button size="icon" variant="outline" className="bg-muted text-primary hover:bg-accent rounded-lg mr-1" onClick={() => downloadInvoice(invoice)} title="Télécharger">
                           <DownloadIcon className="w-4 h-4" />
                         </Button>
-                        {/* Delete button (to implement) */}
-                        <Button size="icon" variant="destructive" className="bg-destructive text-white hover:bg-destructive/80 rounded-lg" title="Supprimer">
+                        <Button size="icon" variant="destructive" className="bg-destructive text-white hover:bg-destructive/80 rounded-lg" title="Supprimer" onClick={() => handleDeleteClick(invoice)}>
                           <XIcon className="w-4 h-4" />
                         </Button>
                       </TableCell>
@@ -634,6 +738,40 @@ const FacturesPage = () => {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Invoice Confirmation Modal */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-[550px] bg-background text-primary rounded-lg shadow-lg p-6">
+          <DialogHeader className="mb-6">
+            <DialogTitle className="text-2xl">Supprimer la Facture</DialogTitle>
+            <DialogDescription>Êtes-vous sûr de vouloir supprimer cette facture ?</DialogDescription>
+          </DialogHeader>
+          
+          {deleteError && (
+            <Alert variant="destructive" className="mb-4 bg-destructive/10 border-destructive text-destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Erreur</AlertTitle>
+              <AlertDescription>{deleteError}</AlertDescription>
+            </Alert>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <DialogClose asChild>
+              <Button type="button" variant="outline" className="w-full sm:w-auto bg-muted/50 hover:bg-muted">
+                Annuler
+              </Button>
+            </DialogClose>
+            <Button 
+              type="submit" 
+              onClick={deleteInvoice} 
+              disabled={isDeleting} 
+              className="w-full sm:w-auto bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? 'Suppression en cours...' : 'Supprimer'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
